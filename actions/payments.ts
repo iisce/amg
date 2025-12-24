@@ -9,15 +9,6 @@ import { sendEmail } from '@/lib/email';
 import {
 	createBookingConfirmationEmail,
 	createSubscriptionConfirmationEmail,
-	createPaymentFailedEmail,
-	createRefundConfirmationEmail,
-} from '@/lib/email-templates';
-import { sendEmail } from '@/lib/email';
-import {
-	createBookingConfirmationEmail,
-	createSubscriptionConfirmationEmail,
-	createPaymentFailedEmail,
-	createRefundConfirmationEmail,
 } from '@/lib/email-templates';
 
 // ============================================
@@ -540,31 +531,26 @@ async function processSuccessfulPayment(
 				},
 			});
 
-		// Send subscription confirmation email
-		const membership = await prisma.membership.findUnique({
-			where: { id: payment.membershipId },
-			include: {
-				user: { select: { name: true, email: true } },
-				space: { select: { name: true } },
-				pricingPlan: { select: { name: true } },
-			},
-		});
-
-		if (membership) {
-			const confirmEmail = createSubscriptionConfirmationEmail(membership);
-			await sendEmail({
-				to: membership.user.email,
-				subject: confirmEmail.subject,
-				html: confirmEmail.html,
-			});
-		}
-				entityId: payment.id,
-				metadata: {
-					reference: payment.reference,
-					amount: payment.amount,
+			// Send subscription confirmation email
+			const membership = await prisma.membership.findUnique({
+				where: { id: payment.membershipId },
+				include: {
+					user: { select: { name: true, email: true } },
+					space: { select: { name: true } },
+					pricingPlan: { select: { name: true } },
 				},
-			},
-		});
+			});
+
+			if (membership) {
+				const confirmEmail =
+					createSubscriptionConfirmationEmail(membership);
+				await sendEmail({
+					to: membership.user.email,
+					subject: confirmEmail.subject,
+					html: confirmEmail.html,
+				});
+			}
+		}
 
 		// Fetch full payment with relations
 		const fullPayment = await prisma.payment.findUnique({
@@ -746,7 +732,8 @@ export async function recordManualPayment(input: {
 			});
 
 			if (membership) {
-				const confirmEmail = createSubscriptionConfirmationEmail(membership);
+				const confirmEmail =
+					createSubscriptionConfirmationEmail(membership);
 				await sendEmail({
 					to: membership.user.email,
 					subject: confirmEmail.subject,
