@@ -5,6 +5,20 @@ import type { Payment, PaymentStatus, PaymentMethod } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { randomBytes } from 'crypto';
 import { getCurrentUser } from './auth';
+import { sendEmail } from '@/lib/email';
+import {
+	createBookingConfirmationEmail,
+	createSubscriptionConfirmationEmail,
+	createPaymentFailedEmail,
+	createRefundConfirmationEmail,
+} from '@/lib/email-templates';
+import { sendEmail } from '@/lib/email';
+import {
+	createBookingConfirmationEmail,
+	createSubscriptionConfirmationEmail,
+	createPaymentFailedEmail,
+	createRefundConfirmationEmail,
+} from '@/lib/email-templates';
 
 // ============================================
 // TYPES
@@ -525,14 +539,25 @@ async function processSuccessfulPayment(
 					status: 'ACTIVE',
 				},
 			});
-		}
 
-		// Log activity
-		await prisma.activityLog.create({
-			data: {
-				userId: payment.userId,
-				action: 'payment.completed',
-				entityType: 'Payment',
+		// Send subscription confirmation email
+		const membership = await prisma.membership.findUnique({
+			where: { id: payment.membershipId },
+			include: {
+				user: { select: { name: true, email: true } },
+				space: { select: { name: true } },
+				pricingPlan: { select: { name: true } },
+			},
+		});
+
+		if (membership) {
+			const confirmEmail = createSubscriptionConfirmationEmail(membership);
+			await sendEmail({
+				to: membership.user.email,
+				subject: confirmEmail.subject,
+				html: confirmEmail.html,
+			});
+		}
 				entityId: payment.id,
 				metadata: {
 					reference: payment.reference,
@@ -680,16 +705,54 @@ export async function recordManualPayment(input: {
 					status: 'CONFIRMED',
 				},
 			});
+
+			// Send booking confirmation email
+			const booking = await prisma.booking.findUnique({
+				where: { id: payment.bookingId },
+				include: {
+					user: { select: { name: true, email: true } },
+					space: { select: { name: true } },
+					pricingPlan: { select: { name: true } },
+				},
+			});
+
+			if (booking) {
+				const confirmEmail = createBookingConfirmationEmail(booking);
+				await sendEmail({
+					to: booking.user.email,
+					subject: confirmEmail.subject,
+					html: confirmEmail.html,
+				});
+			}
 		}
 
-		if (input.membershipId) {
+		if (payment.membershipId) {
 			await prisma.membership.update({
-				where: { id: input.membershipId },
+				where: { id: payment.membershipId },
 				data: {
 					paymentStatus: 'PAID',
 					status: 'ACTIVE',
 				},
 			});
+
+			// Send subscription confirmation email
+			const membership = await prisma.membership.findUnique({
+				where: { id: payment.membershipId },
+				include: {
+					user: { select: { name: true, email: true } },
+					space: { select: { name: true } },
+					pricingPlan: { select: { name: true } },
+				},
+			});
+
+			if (membership) {
+				const confirmEmail = createSubscriptionConfirmationEmail(membership);
+				await sendEmail({
+					to: membership.user.email,
+					subject: confirmEmail.subject,
+					html: confirmEmail.html,
+				});
+			}
 		}
 
 		await prisma.activityLog.create({

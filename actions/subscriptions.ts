@@ -11,6 +11,12 @@ import type {
 import { revalidatePath } from 'next/cache';
 import { randomBytes } from 'crypto';
 import { getCurrentUser } from './auth';
+import { sendEmail } from '@/lib/email';
+import {
+	createSubscriptionRenewalEmail,
+	createSubscriptionCancellationEmail,
+	createSubscriptionPausedEmail,
+} from '@/lib/email-templates';
 
 // ============================================
 // TYPES
@@ -527,7 +533,25 @@ export async function pauseSubscription(
 			};
 		}
 
-		return updateSubscriptionStatus(id, 'SUSPENDED');
+		const result = await updateSubscriptionStatus(id, 'SUSPENDED');
+
+		// Send pause notification email if successful
+		if (result.success && result.data) {
+			const membershipData = Array.isArray(result.data)
+				? result.data[0]
+				: result.data;
+			if (membershipData) {
+				const pauseEmail =
+					createSubscriptionPausedEmail(membershipData);
+				await sendEmail({
+					to: membershipData.user.email,
+					subject: pauseEmail.subject,
+					html: pauseEmail.html,
+				});
+			}
+		}
+
+		return result;
 	} catch (error) {
 		console.error('Pause subscription error:', error);
 		return {
@@ -573,7 +597,25 @@ export async function cancelSubscription(
 			};
 		}
 
-		return updateSubscriptionStatus(id, 'CANCELLED');
+		const result = await updateSubscriptionStatus(id, 'CANCELLED');
+
+		// Send cancellation email if successful
+		if (result.success && result.data) {
+			const membershipData = Array.isArray(result.data)
+				? result.data[0]
+				: result.data;
+			if (membershipData) {
+				const cancelEmail =
+					createSubscriptionCancellationEmail(membershipData);
+				await sendEmail({
+					to: membershipData.user.email,
+					subject: cancelEmail.subject,
+					html: cancelEmail.html,
+				});
+			}
+		}
+
+		return result;
 	} catch (error) {
 		console.error('Cancel subscription error:', error);
 		return {
@@ -640,6 +682,16 @@ export async function renewSubscription(
 					newEndDate,
 				},
 			},
+		});
+
+		// Send renewal confirmation email
+		const renewalEmail = createSubscriptionRenewalEmail(
+			updatedMembership as MembershipWithRelations
+		);
+		await sendEmail({
+			to: updatedMembership.user.email,
+			subject: renewalEmail.subject,
+			html: renewalEmail.html,
 		});
 
 		revalidatePath('/dashboard');

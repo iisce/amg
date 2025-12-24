@@ -6,6 +6,12 @@ import { randomBytes } from 'crypto';
 import { auth, signIn, signOut } from '@/auth';
 import { AuthError } from 'next-auth';
 import type { User, UserRole } from '@prisma/client';
+import { sendEmail } from '@/lib/email';
+import {
+	createWelcomeEmail,
+	createPasswordResetEmail,
+	createPasswordResetSuccessEmail,
+} from '@/lib/email-templates';
 
 // ============================================
 // TYPES
@@ -82,6 +88,17 @@ export async function register(formData: {
 				entityType: 'User',
 				entityId: user.id,
 			},
+		});
+
+		// Send welcome email
+		const welcomeEmail = createWelcomeEmail({
+			name: user.name,
+			email: user.email,
+		});
+		await sendEmail({
+			to: user.email,
+			subject: welcomeEmail.subject,
+			html: welcomeEmail.html,
 		});
 
 		const { password: _, ...userWithoutPassword } = user;
@@ -321,9 +338,16 @@ export async function requestPasswordReset(email: string): Promise<AuthResult> {
 			},
 		});
 
-		// TODO: Send email with reset link
-		// const resetLink = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${token}`
-		// await sendEmail({ to: user.email, subject: "Password Reset", ... })
+		// Send password reset email
+		const resetEmail = createPasswordResetEmail(
+			{ name: user.name, email: user.email },
+			token
+		);
+		await sendEmail({
+			to: user.email,
+			subject: resetEmail.subject,
+			html: resetEmail.html,
+		});
 
 		await prisma.activityLog.create({
 			data: {
@@ -391,6 +415,17 @@ export async function resetPassword(
 				entityType: 'User',
 				entityId: resetToken.userId,
 			},
+		});
+
+		// Send password reset success email
+		const successEmail = createPasswordResetSuccessEmail({
+			name: resetToken.user.name,
+			email: resetToken.user.email,
+		});
+		await sendEmail({
+			to: resetToken.user.email,
+			subject: successEmail.subject,
+			html: successEmail.html,
 		});
 
 		return {

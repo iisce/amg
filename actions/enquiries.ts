@@ -5,6 +5,11 @@ import { getCurrentUser } from './auth';
 import type { ApiResponse } from '@/lib/types';
 import type { Enquiry, EnquiryStatus } from '@prisma/client';
 import { z } from 'zod';
+import { sendEmail } from '@/lib/email';
+import {
+	createEnquiryReceivedEmailToAdmin,
+	createEnquiryConfirmationEmailToUser,
+} from '@/lib/email-templates';
 
 // ============================================
 // ENQUIRY SCHEMAS
@@ -55,6 +60,40 @@ export async function createEnquiry(
 			include: {
 				space: true,
 			},
+		});
+
+		// Send confirmation email to user
+		const userEmail = createEnquiryConfirmationEmailToUser({
+			name: enquiry.name,
+			subject: enquiry.subject,
+		});
+		await sendEmail({
+			to: enquiry.email,
+			subject: userEmail.subject,
+			html: userEmail.html,
+		});
+
+		// Send notification email to admin
+		const adminEmail = createEnquiryReceivedEmailToAdmin({
+			id: enquiry.id,
+			name: enquiry.name,
+			email: enquiry.email,
+			phone: enquiry.phone,
+			company: enquiry.company,
+			subject: enquiry.subject,
+			message: enquiry.message,
+			spaceName: enquiry.space?.name,
+		});
+
+		// Get admin email from environment or default
+		const adminEmailAddress =
+			process.env.ADMIN_EMAIL ||
+			process.env.SMTP_USER ||
+			'admin@amgworkspace.com';
+		await sendEmail({
+			to: adminEmailAddress,
+			subject: adminEmail.subject,
+			html: adminEmail.html,
 		});
 
 		return {

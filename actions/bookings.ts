@@ -5,6 +5,24 @@ import type { Booking, BookingStatus } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { randomBytes } from 'crypto';
 import { getCurrentUser } from './auth';
+import { sendEmail } from '@/lib/email';
+import {
+	createBookingConfirmationEmail,
+	createBookingCancellationEmail,
+	createCheckInNotificationEmail,
+} from '@/lib/email-templates';
+import { sendEmail } from '@/lib/email';
+import {
+	createBookingConfirmationEmail,
+	createBookingCancellationEmail,
+	createCheckInNotificationEmail,
+} from '@/lib/email-templates';
+import { sendEmail } from '@/lib/email';
+import {
+	createBookingConfirmationEmail,
+	createBookingCancellationEmail,
+	createCheckInNotificationEmail,
+} from '@/lib/email-templates';
 
 // ============================================
 // TYPES
@@ -492,7 +510,24 @@ export async function cancelBooking(id: string): Promise<BookingResult> {
 			};
 		}
 
-		return updateBookingStatus(id, 'CANCELLED');
+		const result = await updateBookingStatus(id, 'CANCELLED');
+
+		// Send cancellation email if successful
+		if (result.success && result.data) {
+			const bookingData = Array.isArray(result.data)
+				? result.data[0]
+				: result.data;
+			if (bookingData) {
+				const cancelEmail = createBookingCancellationEmail(bookingData);
+				await sendEmail({
+					to: bookingData.user.email,
+					subject: cancelEmail.subject,
+					html: cancelEmail.html,
+				});
+			}
+		}
+
+		return result;
 	} catch (error) {
 		console.error('Cancel booking error:', error);
 		return {
@@ -557,42 +592,29 @@ export async function checkInBooking(id: string): Promise<BookingResult> {
 			},
 		});
 
-		revalidatePath('/admin/scanner');
-		revalidatePath('/admin/bookings');
+	// Send check-in notification email
+	const checkInEmail = createCheckInNotificationEmail(
+		updatedBooking as BookingWithRelations
+	);
+	await sendEmail({
+		to: updatedBooking.user.email,
+		subject: checkInEmail.subject,
+		html: checkInEmail.html,
+	});
 
-		return {
-			success: true,
-			message: 'Check-in successful!',
-			data: updatedBooking as BookingWithRelations,
-		};
-	} catch (error) {
-		console.error('Check-in booking error:', error);
-		return {
-			success: false,
-			message: 'Failed to check in',
-			error: error instanceof Error ? error.message : 'Unknown error',
-		};
-	}
+	return {
+		success: true,
+		message: 'Check-in successful!',
+		data: updatedBooking as BookingWithRelations,
+	};
+} catch (error) {
+	console.error('Check-in booking error:', error);
+	return {
+		success: false,
+		message: 'Failed to check in',
+		error: error instanceof Error ? error.message : 'Unknown error',
+	};
 }
-
-export async function checkOutBooking(id: string): Promise<BookingResult> {
-	try {
-		const booking = await prisma.booking.findUnique({ where: { id } });
-
-		if (!booking) {
-			return {
-				success: false,
-				message: 'Booking not found',
-			};
-		}
-
-		if (booking.status !== 'CHECKED_IN') {
-			return {
-				success: false,
-				message: 'Only checked-in bookings can be checked out',
-			};
-		}
-
 		const updatedBooking = await prisma.booking.update({
 			where: { id },
 			data: {
