@@ -7,9 +7,7 @@ const nextConfig = {
 		unoptimized: true,
 	},
 	// Ensure Prisma client is bundled correctly for serverless
-	experimental: {
-		serverComponentsExternalPackages: ['@prisma/client', '@prisma/engines'],
-	},
+	serverExternalPackages: ['@prisma/client', '@prisma/engines'],
 };
 
 export default nextConfig;

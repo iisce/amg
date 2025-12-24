@@ -7,19 +7,6 @@ import { randomBytes } from 'crypto';
 import { getCurrentUser } from './auth';
 import { sendEmail } from '@/lib/email';
 import {
-	createBookingConfirmationEmail,
-	createBookingCancellationEmail,
-	createCheckInNotificationEmail,
-} from '@/lib/email-templates';
-import { sendEmail } from '@/lib/email';
-import {
-	createBookingConfirmationEmail,
-	createBookingCancellationEmail,
-	createCheckInNotificationEmail,
-} from '@/lib/email-templates';
-import { sendEmail } from '@/lib/email';
-import {
-	createBookingConfirmationEmail,
 	createBookingCancellationEmail,
 	createCheckInNotificationEmail,
 } from '@/lib/email-templates';
@@ -592,29 +579,52 @@ export async function checkInBooking(id: string): Promise<BookingResult> {
 			},
 		});
 
-	// Send check-in notification email
-	const checkInEmail = createCheckInNotificationEmail(
-		updatedBooking as BookingWithRelations
-	);
-	await sendEmail({
-		to: updatedBooking.user.email,
-		subject: checkInEmail.subject,
-		html: checkInEmail.html,
-	});
+		// Send check-in notification email
+		const checkInEmail = createCheckInNotificationEmail(
+			updatedBooking as BookingWithRelations
+		);
+		await sendEmail({
+			to: updatedBooking.user.email,
+			subject: checkInEmail.subject,
+			html: checkInEmail.html,
+		});
 
-	return {
-		success: true,
-		message: 'Check-in successful!',
-		data: updatedBooking as BookingWithRelations,
-	};
-} catch (error) {
-	console.error('Check-in booking error:', error);
-	return {
-		success: false,
-		message: 'Failed to check in',
-		error: error instanceof Error ? error.message : 'Unknown error',
-	};
+		revalidatePath('/dashboard/bookings');
+		revalidatePath('/admin/bookings');
+
+		return {
+			success: true,
+			message: 'Check-in successful!',
+			data: updatedBooking as BookingWithRelations,
+		};
+	} catch (error) {
+		console.error('Check-in booking error:', error);
+		return {
+			success: false,
+			message: 'Failed to check in',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
 }
+
+export async function checkOutBooking(id: string): Promise<BookingResult> {
+	try {
+		const booking = await prisma.booking.findUnique({ where: { id } });
+
+		if (!booking) {
+			return {
+				success: false,
+				message: 'Booking not found',
+			};
+		}
+
+		if (booking.status !== 'CHECKED_IN') {
+			return {
+				success: false,
+				message: 'Only checked-in bookings can be checked out',
+			};
+		}
+
 		const updatedBooking = await prisma.booking.update({
 			where: { id },
 			data: {
