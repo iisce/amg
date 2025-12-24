@@ -1,0 +1,608 @@
+// This is your Prisma schema file
+// Prisma 7 configuration - Database URL is in prisma.config.ts
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String // Hashed password
+  name          String
+  phone         String?
+  company       String? // Company/organization name
+  avatar        String?
+  role          UserRole  @default(CLIENT)
+  isActive      Boolean   @default(true)
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  bookings           Booking[]
+  memberships        Membership[]
+  passwordResetToken PasswordResetToken?
+  sessions           Session[]
+  accounts           Account[]
+  payments           Payment[]
+  activityLogs       ActivityLog[]
+  enquiries          Enquiry[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionToken])
+  @@index([userId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+}
+
+enum UserRole {
+  CLIENT
+  STAFF
+  FRONT_DESK
+  FRONT_DESK_ASSISTANT
+  ADMIN
+  SUPER_ADMIN
+}
+
+// ============================================
+// SPACES & PRICING
+// ============================================
+
+model Space {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  description     String        @db.Text
+  fullDescription String?       @db.Text
+  capacity        Int
+  amenities       String[]
+  features        String[]
+  images          String[]
+  category        SpaceCategory @default(WORKSPACE)
+  type            SpaceType     @default(BOOKING)
+  isActive        Boolean       @default(true)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  pricingPlans PricingPlan[]
+  bookings     Booking[]
+  memberships  Membership[]
+  timeSlots    TimeSlot[]
+  enquiries    Enquiry[]
+  planPerks    PlanPerk[]    @relation("PerkSpace") // Spaces available as perks
+  addons       Addon[] // Add-ons that give access to this space
+
+  @@index([slug])
+  @@index([category])
+  @@index([type])
+  @@index([isActive])
+}
+
+model PricingPlan {
+  id          String   @id @default(cuid())
+  spaceId     String
+  name        String
+  description String?
+  price       Int // Price in kobo (smallest currency unit)
+  duration    Int? // Duration in hours (for hourly bookings)
+  unit        String   @default("day") // day, week, month, hour, session
+  type        PlanType
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Subscription-specific fields
+  daysAllowed     Int? // Number of days allowed per billing period (null = unlimited)
+  maxPauseDays    Int     @default(0) // Maximum days subscription can be paused
+  carryOver       Boolean @default(false) // Whether unused days carry over
+  timeRestriction String? // Time restriction e.g., "18:00-21:00" for Evening Plan
+  dayRestriction  String? // Day restriction e.g., "SATURDAY" for Saturday Plans
+
+  // Relations
+  space           Space        @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  bookings        Booking[]
+  memberships     Membership[]
+  perks           PlanPerk[] // Included benefits (e.g., "1 hr Board Room per week")
+  availableAddons Addon[]      @relation("AddonPlans") // Add-ons purchasable with this plan
+
+  @@index([spaceId])
+  @@index([type])
+  @@index([isActive])
+}
+
+model TimeSlot {
+  id        String   @id @default(cuid())
+  spaceId   String
+  startTime String // Format: "09:00"
+  endTime   String // Format: "11:00"
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@index([spaceId])
+}
+
+enum SpaceCategory {
+  WORKSPACE
+  OFFICE
+  MEETING
+  CREATIVE
+  EVENT
+  SOCIAL
+}
+
+enum SpaceType {
+  SUBSCRIPTION // Long-term (shared desks, private offices)
+  BOOKING // Short-term (board room, studio, lounge)
+}
+
+enum PlanType {
+  HOURLY
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+// ============================================
+// PLAN PERKS & ADD-ONS
+// ============================================
+
+// Benefits included with a pricing plan (e.g., "1 hr Board Room per week")
+model PlanPerk {
+  id            String  @id @default(cuid())
+  pricingPlanId String
+  name          String // Display name: "Board Room Access"
+  description   String? // "1 hour per week"
+
+  // What space they get access to (null for general perks like "Lounge Access")
+  includedSpaceId String?
+
+  // Duration and limits
+  durationMinutes Int // e.g., 60 for 1 hour (0 for unlimited access like lounge)
+  limitPerPeriod  Int        @default(1) // e.g., 1 (1 time per period)
+  periodType      PerkPeriod @default(WEEKLY) // DAILY, WEEKLY, MONTHLY, SUBSCRIPTION_PERIOD
+  isUnlimited     Boolean    @default(false) // True for things like "Free lounge access"
+
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  pricingPlan   PricingPlan @relation(fields: [pricingPlanId], references: [id], onDelete: Cascade)
+  includedSpace Space?      @relation("PerkSpace", fields: [includedSpaceId], references: [id])
+  usages        PerkUsage[]
+
+  @@index([pricingPlanId])
+  @@index([includedSpaceId])
+  @@index([isActive])
+}
+
+// Track usage of plan perks
+model PerkUsage {
+  id           String   @id @default(cuid())
+  perkId       String
+  membershipId String
+  bookingId    String?  @unique // Optional: if a booking was created
+  usedAt       DateTime @default(now())
+  durationUsed Int // Minutes used
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  // Relations
+  perk       PlanPerk   @relation(fields: [perkId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  booking    Booking?   @relation(fields: [bookingId], references: [id])
+
+  @@index([perkId])
+  @@index([membershipId])
+  @@index([usedAt])
+}
+
+// Purchasable add-ons (e.g., "Photo studio ₦5,000/hr")
+model Addon {
+  id          String  @id @default(cuid())
+  name        String // "Photo Studio Session"
+  description String?
+  spaceId     String? // What space does this addon give access to (null for non-space addons)
+
+  // Pricing
+  price           Int // Price in kobo
+  durationMinutes Int @default(60) // Duration included (e.g., 60 for 1 hour)
+
+  // Availability
+  isActive             Boolean @default(true)
+  availableForAllPlans Boolean @default(true) // If false, check availablePlans
+
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  space          Space?          @relation(fields: [spaceId], references: [id])
+  availablePlans PricingPlan[]   @relation("AddonPlans") // Plans that can purchase this addon
+  purchases      AddonPurchase[]
+
+  @@index([spaceId])
+  @@index([isActive])
+}
+
+// Track addon purchases
+model AddonPurchase {
+  id           String  @id @default(cuid())
+  addonId      String
+  membershipId String
+  paymentId    String?
+  bookingId    String? @unique // If a booking was created from this addon
+
+  // Quantity and usage
+  quantity     Int @default(1) // How many units purchased
+  usedQuantity Int @default(0) // How many used
+
+  // Pricing at time of purchase
+  unitPrice   Int // Price per unit at purchase time (in kobo)
+  totalAmount Int // Total amount paid (in kobo)
+
+  status    AddonPurchaseStatus @default(PENDING)
+  expiresAt DateTime? // When the addon expires (null = never)
+  notes     String?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  // Relations
+  addon      Addon      @relation(fields: [addonId], references: [id])
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  payment    Payment?   @relation(fields: [paymentId], references: [id])
+  booking    Booking?   @relation(fields: [bookingId], references: [id])
+
+  @@index([addonId])
+  @@index([membershipId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+enum PerkPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  SUBSCRIPTION_PERIOD // Resets each billing cycle
+}
+
+enum AddonPurchaseStatus {
+  PENDING
+  ACTIVE
+  USED
+  EXPIRED
+  CANCELLED
+}
+
+// ============================================
+// BOOKINGS
+// ============================================
+
+model Booking {
+  id            String        @id @default(cuid())
+  bookingNumber String        @unique // Human-readable: AMG-BK-XXXXXX
+  userId        String
+  spaceId       String
+  pricingPlanId String
+  bookingDate   DateTime
+  startTime     DateTime
+  endTime       DateTime
+  attendees     Int           @default(1)
+  totalAmount   Int // Amount in kobo
+  status        BookingStatus @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+  qrCode        String        @unique
+  checkInTime   DateTime?
+  checkOutTime  DateTime?
+  notes         String?       @db.Text
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Contact info (for guest bookings or additional contact)
+  contactName  String?
+  contactEmail String?
+  contactPhone String?
+
+  // Relations
+  user          User           @relation(fields: [userId], references: [id])
+  space         Space          @relation(fields: [spaceId], references: [id])
+  pricingPlan   PricingPlan    @relation(fields: [pricingPlanId], references: [id])
+  payment       Payment?
+  perkUsage     PerkUsage? // If created from a plan perk
+  addonPurchase AddonPurchase? // If created from an addon purchase
+
+  @@index([userId])
+  @@index([spaceId])
+  @@index([bookingDate])
+  @@index([qrCode])
+  @@index([bookingNumber])
+  @@index([status])
+  @@index([paymentStatus])
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+// ============================================
+// PAYMENTS
+// ============================================
+
+model Payment {
+  id              String        @id @default(cuid())
+  reference       String        @unique // Our internal reference: AMG-PAY-XXXXXX
+  userId          String
+  bookingId       String?       @unique
+  membershipId    String?       @unique
+  amount          Int // Amount in kobo
+  currency        String        @default("NGN")
+  method          PaymentMethod @default(CARD)
+  provider        String        @default("paystack") // paystack, flutterwave, transfer
+  providerRef     String? // Reference from payment provider
+  status          PaymentStatus @default(PENDING)
+  paidAt          DateTime?
+  refundedAt      DateTime?
+  refundReason    String?
+  gatewayResponse Json? // Full response from payment gateway
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  user           User            @relation(fields: [userId], references: [id])
+  booking        Booking?        @relation(fields: [bookingId], references: [id])
+  membership     Membership?     @relation(fields: [membershipId], references: [id])
+  addonPurchases AddonPurchase[] // Addon purchases paid with this payment
+
+  @@index([reference])
+  @@index([userId])
+  @@index([providerRef])
+  @@index([status])
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  USSD
+  CASH
+}
+
+// ============================================
+// MEMBERSHIPS / SUBSCRIPTIONS
+// ============================================
+
+model Membership {
+  id               String           @id @default(cuid())
+  membershipNumber String           @unique // Human-readable: AMG-MB-XXXXXX
+  userId           String
+  spaceId          String
+  pricingPlanId    String
+  type             MembershipType
+  totalAmount      Int // Price in kobo
+  startDate        DateTime
+  endDate          DateTime
+  status           MembershipStatus @default(PENDING)
+  paymentStatus    PaymentStatus    @default(PENDING)
+  accessCode       String?          @unique // For access control
+  assignedDesk     String? // Desk number if applicable
+  autoRenew        Boolean          @default(false)
+  renewedAt        DateTime? // Last renewal date
+  notes            String?          @db.Text
+
+  // For fixed-day subscriptions (e.g., 10 days per month)
+  daysAllowed Int? // Number of days allowed per billing period
+
+  // Pause functionality
+  pausedAt        DateTime? // When subscription was paused
+  totalPausedDays Int       @default(0) // Total days paused in current period
+  pauseHistory    Json? // Array of pause/resume records [{pausedAt, resumedAt, days}]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user           User                @relation(fields: [userId], references: [id])
+  space          Space               @relation(fields: [spaceId], references: [id])
+  pricingPlan    PricingPlan         @relation(fields: [pricingPlanId], references: [id])
+  payments       Payment[]
+  checkIns       MembershipCheckIn[]
+  perkUsages     PerkUsage[] // Track usage of plan perks
+  addonPurchases AddonPurchase[] // Purchased add-ons
+
+  @@index([userId])
+  @@index([spaceId])
+  @@index([endDate])
+  @@index([status])
+  @@index([membershipNumber])
+  @@index([accessCode])
+}
+
+// Track attendance/check-ins for memberships
+model MembershipCheckIn {
+  id           String    @id @default(cuid())
+  membershipId String
+  checkInTime  DateTime  @default(now())
+  checkOutTime DateTime?
+  notes        String?
+  createdAt    DateTime  @default(now())
+
+  // Relations
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([membershipId])
+  @@index([checkInTime])
+}
+
+enum MembershipType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  EXPIRED
+  CANCELLED
+  SUSPENDED
+}
+
+// ============================================
+// PUBLIC HOLIDAYS
+// ============================================
+
+model PublicHoliday {
+  id          String   @id @default(cuid())
+  name        String // e.g., "Christmas Day", "New Year's Day"
+  date        DateTime // The holiday date
+  isRecurring Boolean  @default(false) // Repeats yearly (like Christmas) or one-time
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([date])
+  @@index([isActive])
+}
+
+// ============================================
+// ENQUIRIES
+// ============================================
+
+model Enquiry {
+  id        String        @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  company   String?
+  spaceId   String? // Optional - specific space inquiry
+  subject   String
+  message   String        @db.Text
+  status    EnquiryStatus @default(NEW)
+  userId    String? // If user was logged in
+  notes     String?       @db.Text // Admin notes
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  // Relations
+  space Space? @relation(fields: [spaceId], references: [id])
+  user  User?  @relation(fields: [userId], references: [id])
+
+  @@index([email])
+  @@index([spaceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum EnquiryStatus {
+  NEW
+  IN_PROGRESS
+  RESPONDED
+  CLOSED
+}
+
+// ============================================
+// AUDIT & ACTIVITY LOGS
+// ============================================
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String // e.g., "booking.created", "user.login"
+  entityType String? // e.g., "Booking", "User"
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
