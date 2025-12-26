@@ -83,7 +83,9 @@ const formatDuration = (minutes: number) => {
 	if (minutes < 60) return `${minutes} mins`;
 	const hours = Math.floor(minutes / 60);
 	const mins = minutes % 60;
-	return mins > 0 ? `${hours}hr ${mins}mins` : `${hours} hour${hours > 1 ? 's' : ''}`;
+	return mins > 0
+		? `${hours}hr ${mins}mins`
+		: `${hours} hour${hours > 1 ? 's' : ''}`;
 };
 
 export function AddonsManagement({
@@ -161,7 +163,10 @@ export function AddonsManagement({
 					callbackUrl: `${window.location.origin}/dashboard/subscriptions/${membershipId}?addon=success`,
 				});
 
-				if (paymentResult.success && paymentResult.data?.authorizationUrl) {
+				if (
+					paymentResult.success &&
+					paymentResult.data?.authorizationUrl
+				) {
 					window.location.href = paymentResult.data.authorizationUrl;
 				} else {
 					// For demo, just refresh
@@ -420,7 +425,9 @@ export function AddonsManagement({
 							<div className='p-3 bg-green-50 border border-green-200 rounded-lg'>
 								<p className='text-sm font-medium text-green-700'>
 									{activePurchases.length} active add-on
-									{activePurchases.length !== 1 ? 's' : ''}{' '}
+									{activePurchases.length !== 1
+										? 's'
+										: ''}{' '}
 									available
 								</p>
 							</div>

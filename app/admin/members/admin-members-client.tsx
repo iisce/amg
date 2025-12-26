@@ -31,6 +31,7 @@ import {
 	Building2,
 	Package,
 	ShoppingCart,
+	Blocks,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { AddStaffDialog } from '@/components/admin/add-staff-dialog';
@@ -222,6 +223,13 @@ export default function AdminMembersClient({
 						>
 							<ShoppingCart className='h-4 w-4' />
 							Shop
+						</Link>
+						<Link
+							href='/admin/addons'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<Blocks className='h-4 w-4' />
+							Add-ons
 						</Link>
 						<Link
 							href='/admin/reports'

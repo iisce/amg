@@ -22,6 +22,7 @@ import {
 	Loader2,
 	Package,
 	ShoppingCart,
+	Blocks,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { updateSpace } from '@/actions';
@@ -154,6 +155,13 @@ export default function AdminSpacesClient({
 						>
 							<ShoppingCart className='h-4 w-4' />
 							Shop
+						</Link>
+						<Link
+							href='/admin/addons'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<Blocks className='h-4 w-4' />
+							Add-ons
 						</Link>
 						<Link
 							href='/admin/reports'

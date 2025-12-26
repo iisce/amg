@@ -24,6 +24,7 @@ import {
 	UserPlus,
 	Package,
 	ShoppingCart,
+	Blocks,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -231,6 +232,13 @@ export default function AdminDashboardClient({
 						>
 							<ShoppingCart className='h-4 w-4' />
 							Shop
+						</Link>
+						<Link
+							href='/admin/addons'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
+						>
+							<Blocks className='h-4 w-4' />
+							Add-ons
 						</Link>
 						<Link
 							href='/admin/reports'
