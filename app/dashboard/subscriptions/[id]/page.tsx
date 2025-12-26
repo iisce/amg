@@ -12,6 +12,7 @@ import {
 import { CancelSubscriptionForm } from './cancel-subscription-form';
 import { SubscriptionQRCode } from './subscription-qr-code';
 import { TeamManagement } from '@/components/team/team-management';
+import { AddonsManagement } from '@/components/addons/addons-management';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -517,6 +518,15 @@ export default async function SubscriptionDetailPage({ params }: PageProps) {
 								isAdmin={false}
 							/>
 						)}
+
+					{/* Addons Management - Show for active subscriptions */}
+					{subscription.status === 'ACTIVE' && (
+						<AddonsManagement
+							membershipId={subscription.id}
+							pricingPlanId={subscription.pricingPlanId}
+							isActive={subscription.status === 'ACTIVE'}
+						/>
+					)}
 
 					{/* Recent Attendance */}
 					{attendance && attendance.checkIns.length > 0 && (

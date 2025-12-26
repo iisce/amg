@@ -376,6 +376,12 @@ export async function createSubscription(
 				id: true,
 				price: true,
 				daysAllowed: true,
+				space: {
+					select: {
+						capacity: true,
+						category: true,
+					},
+				},
 			},
 		});
 
@@ -411,8 +417,12 @@ export async function createSubscription(
 			input.durationMultiplier || 1
 		);
 
-		// Determine max members (default to 1 for individual subscriptions)
-		const maxMembers = input.maxMembers ?? 1;
+		// Determine max members: use input if provided, else use space capacity for OFFICE spaces, else default to 1
+		const maxMembers =
+			input.maxMembers ??
+			(pricingPlan.space?.category === 'OFFICE'
+				? pricingPlan.space.capacity
+				: 1);
 
 		const membership = await prisma.membership.create({
 			data: {

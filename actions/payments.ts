@@ -947,6 +947,160 @@ export async function refundPayment(
 // PAYMENT STATS (Admin)
 // ============================================
 
+// ============================================
+// ADDON PAYMENT
+// ============================================
+
+export async function initializeAddonPayment(input: {
+	addonPurchaseId: string;
+	callbackUrl?: string;
+}): Promise<{
+	success: boolean;
+	message: string;
+	data?: {
+		paymentId: string;
+		reference: string;
+		authorizationUrl?: string;
+	};
+	error?: string;
+}> {
+	try {
+		const user = await getCurrentUser();
+
+		if (!user) {
+			return {
+				success: false,
+				message: 'Please login to make a payment',
+			};
+		}
+
+		// Get the addon purchase
+		const addonPurchase = await prisma.addonPurchase.findUnique({
+			where: { id: input.addonPurchaseId },
+			include: {
+				addon: true,
+				membership: {
+					select: { userId: true },
+				},
+			},
+		});
+
+		if (!addonPurchase) {
+			return {
+				success: false,
+				message: 'Add-on purchase not found',
+			};
+		}
+
+		// Verify ownership
+		if (addonPurchase.membership.userId !== user.id) {
+			return {
+				success: false,
+				message: 'Unauthorized',
+			};
+		}
+
+		const reference = generateReference();
+
+		// Create payment record and link to addon purchase
+		const payment = await prisma.payment.create({
+			data: {
+				reference,
+				userId: user.id,
+				amount: addonPurchase.totalAmount,
+				method: 'CARD',
+				status: 'PENDING',
+			},
+		});
+
+		// Link the addon purchase to the payment
+		await prisma.addonPurchase.update({
+			where: { id: addonPurchase.id },
+			data: { paymentId: payment.id },
+		});
+
+		const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
+
+		if (paystackSecretKey) {
+			// Initialize Paystack transaction
+			const paystackResponse = await fetch(
+				'https://api.paystack.co/transaction/initialize',
+				{
+					method: 'POST',
+					headers: {
+						Authorization: `Bearer ${paystackSecretKey}`,
+						'Content-Type': 'application/json',
+					},
+					body: JSON.stringify({
+						email: user.email,
+						amount: addonPurchase.totalAmount, // Amount in kobo
+						reference,
+						callback_url:
+							input.callbackUrl ||
+							`${process.env.NEXT_PUBLIC_APP_URL}/dashboard/subscriptions`,
+						metadata: {
+							payment_id: payment.id,
+							addon_purchase_id: addonPurchase.id,
+							user_id: user.id,
+							type: 'addon',
+						},
+					}),
+				}
+			);
+
+			const paystackData = await paystackResponse.json();
+
+			if (paystackData.status) {
+				// Update payment with Paystack access code
+				await prisma.payment.update({
+					where: { id: payment.id },
+					data: {
+						gatewayResponse: paystackData.data,
+					},
+				});
+
+				return {
+					success: true,
+					message: 'Payment initialized',
+					data: {
+						paymentId: payment.id,
+						reference,
+						authorizationUrl: paystackData.data.authorization_url,
+					},
+				};
+			}
+		}
+
+		// Fallback for development - auto-mark as paid
+		await prisma.$transaction([
+			prisma.payment.update({
+				where: { id: payment.id },
+				data: { status: 'PAID', paidAt: new Date() },
+			}),
+			prisma.addonPurchase.update({
+				where: { id: addonPurchase.id },
+				data: { status: 'ACTIVE' },
+			}),
+		]);
+
+		return {
+			success: true,
+			message: 'Add-on payment completed',
+			data: {
+				paymentId: payment.id,
+				reference,
+			},
+		};
+	} catch (error) {
+		console.error('Initialize addon payment error:', error);
+		return {
+			success: false,
+			message: 'Failed to initialize payment',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
 export async function getPaymentStats(options?: {
 	fromDate?: Date;
 	toDate?: Date;
