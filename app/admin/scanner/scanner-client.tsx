@@ -194,9 +194,14 @@ export default function QRScannerClient() {
 
 	// Attach stream to video element when isScanning becomes true
 	useEffect(() => {
-		if (isScanning && streamRef.current && videoRef.current && !videoRef.current.srcObject) {
+		if (
+			isScanning &&
+			streamRef.current &&
+			videoRef.current &&
+			!videoRef.current.srcObject
+		) {
 			videoRef.current.srcObject = streamRef.current;
-			
+
 			videoRef.current.onloadedmetadata = async () => {
 				try {
 					await videoRef.current?.play();
