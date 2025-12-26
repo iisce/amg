@@ -755,18 +755,18 @@ export default function BookTourPage() {
 							</CardHeader>
 							<CardContent className='text-sm space-y-3'>
 								<a
-									href='mailto:hello@amgworkspace.com'
+									href='mailto:amgworkspace@gmail.com'
 									className='flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors'
 								>
 									<Mail className='h-4 w-4' />
-									hello@amgworkspace.com
+									amgworkspace@gmail.com
 								</a>
 								<a
-									href='tel:+2340000000000'
+									href='tel:+2349134011777'
 									className='flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors'
 								>
 									<Phone className='h-4 w-4' />
-									+234 xxx xxx xxxx
+									+234 913 401 1777
 								</a>
 							</CardContent>
 						</Card>
