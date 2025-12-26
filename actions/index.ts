@@ -11,3 +11,4 @@ export * from './admin';
 export * from './enquiries';
 export * from './perks';
 export * from './rbac';
+export * from './team-members';

@@ -692,6 +692,60 @@ export default function QRScannerClient() {
 												<p className='text-muted-foreground'>
 													{lastResult.message}
 												</p>
+												{/* Show team member info if present */}
+												{lastResult.data
+													?.teamMember && (
+													<div className='mt-2 flex items-center gap-2'>
+														<Badge
+															variant='outline'
+															className='text-xs'
+														>
+															{lastResult.data
+																.teamMember
+																.isPrimary
+																? 'Primary Member'
+																: 'Team Member'}
+														</Badge>
+														<span className='text-sm font-medium'>
+															{
+																lastResult.data
+																	.teamMember
+																	.name
+															}
+														</span>
+													</div>
+												)}
+												{/* Show occupancy info if present */}
+												{lastResult.data?.occupancy && (
+													<div className='mt-2 flex items-center gap-2'>
+														<Badge
+															variant={
+																lastResult.data
+																	.occupancy
+																	.current >=
+																lastResult.data
+																	.occupancy
+																	.max
+																	? 'destructive'
+																	: 'secondary'
+															}
+															className='text-xs'
+														>
+															Occupancy:{' '}
+															{
+																lastResult.data
+																	.occupancy
+																	.current
+															}
+															/
+															{
+																lastResult.data
+																	.occupancy
+																	.max
+															}
+														</Badge>
+													</div>
+												)}
 											</div>
 											<Button
 												variant='ghost'

@@ -36,6 +36,7 @@ model User {
   payments           Payment[]
   activityLogs       ActivityLog[]
   enquiries          Enquiry[]
+  teamMemberships    MembershipMember[] // Team memberships where user is a member
 
   @@index([email])
   @@index([role])
@@ -471,6 +472,11 @@ model Membership {
   // For fixed-day subscriptions (e.g., 10 days per month)
   daysAllowed Int? // Number of days allowed per billing period
 
+  // Team/Company membership fields
+  companyName       String? // Company name for team subscriptions
+  maxMembers        Int       @default(1) // Maximum team members allowed (base + addons)
+  currentOccupancy  Int       @default(0) // Current number of checked-in members
+
   // Pause functionality
   pausedAt        DateTime? // When subscription was paused
   totalPausedDays Int       @default(0) // Total days paused in current period
@@ -487,6 +493,7 @@ model Membership {
   checkIns       MembershipCheckIn[]
   perkUsages     PerkUsage[] // Track usage of plan perks
   addonPurchases AddonPurchase[] // Purchased add-ons
+  teamMembers    MembershipMember[] // Team members for this subscription
 
   @@index([userId])
   @@index([spaceId])
@@ -494,21 +501,58 @@ model Membership {
   @@index([status])
   @@index([membershipNumber])
   @@index([accessCode])
+  @@index([companyName])
+}
+
+// Team members linked to a membership subscription
+model MembershipMember {
+  id           String  @id @default(cuid())
+  membershipId String
+  userId       String? // Optional: linked user account (null for guest members)
+
+  // For guest members without accounts
+  name         String // Required: member's name
+  email        String? // Optional: for notifications
+  phone        String? // Optional: for contact
+
+  // Access control
+  accessCode   String  @unique // Unique QR/access code for this team member
+  isActive     Boolean @default(true)
+  isPrimary    Boolean @default(false) // True for the subscription owner
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  membership Membership          @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  user       User?               @relation(fields: [userId], references: [id])
+  checkIns   MembershipCheckIn[]
+
+  @@unique([membershipId, email]) // Prevent duplicate email per membership
+  @@index([membershipId])
+  @@index([userId])
+  @@index([accessCode])
+  @@index([isActive])
 }
 
 // Track attendance/check-ins for memberships
 model MembershipCheckIn {
   id           String    @id @default(cuid())
   membershipId String
+  memberId     String? // Optional: specific team member who checked in
   checkInTime  DateTime  @default(now())
   checkOutTime DateTime?
+  checkedInBy  String? // Admin/staff who processed check-in (for front desk)
   notes        String?
   createdAt    DateTime  @default(now())
 
   // Relations
-  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  membership Membership        @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  member     MembershipMember? @relation(fields: [memberId], references: [id], onDelete: SetNull)
 
   @@index([membershipId])
+  @@index([memberId])
   @@index([checkInTime])
 }
 

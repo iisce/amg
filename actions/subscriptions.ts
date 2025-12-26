@@ -62,6 +62,9 @@ export interface CreateSubscriptionInput {
 	contactName?: string;
 	contactEmail?: string;
 	contactPhone?: string;
+	// Team membership fields
+	companyName?: string;
+	maxMembers?: number; // Total members allowed (base + addons)
 }
 
 // ============================================
@@ -391,6 +394,9 @@ export async function createSubscription(
 		const startDate = new Date(input.startDate);
 		const endDate = calculateEndDate(startDate, input.type);
 
+		// Determine max members (default to 1 for individual subscriptions)
+		const maxMembers = input.maxMembers ?? 1;
+
 		const membership = await prisma.membership.create({
 			data: {
 				membershipNumber: generateMembershipNumber(),
@@ -405,6 +411,10 @@ export async function createSubscription(
 				autoRenew: input.autoRenew ?? false,
 				assignedDesk: input.assignedDesk,
 				daysAllowed: pricingPlan.daysAllowed, // Copy days allowed from pricing plan
+				// Team membership fields
+				companyName: input.companyName,
+				maxMembers,
+				currentOccupancy: 0,
 			},
 			include: {
 				user: {
@@ -416,6 +426,20 @@ export async function createSubscription(
 				pricingPlan: {
 					select: { id: true, name: true, price: true, unit: true },
 				},
+			},
+		});
+
+		// Create primary team member for the subscription holder
+		await prisma.membershipMember.create({
+			data: {
+				membershipId: membership.id,
+				userId: user.id,
+				name: membership.user.name,
+				email: membership.user.email,
+				phone: membership.user.phone,
+				accessCode: `AMG-TM-${generateAccessCode()}`,
+				isPrimary: true,
+				isActive: true,
 			},
 		});
 
@@ -1093,23 +1117,41 @@ export interface AdminCheckInResult {
 			daysAllowed: number | null;
 			daysRemaining: number | null;
 		};
+		// Team member info if applicable
+		teamMember?: {
+			id: string;
+			name: string;
+			isPrimary: boolean;
+		};
+		occupancy?: {
+			current: number;
+			max: number;
+		};
 	};
 }
 
 /**
- * Admin action to check in a member by membership number or access code
+ * Admin action to check in a member by membership number, access code, or team member access code
+ * Handles both individual memberships and team memberships
  * No location constraints - just requires admin to be authenticated
  */
 export async function adminCheckInByCode(
 	code: string
 ): Promise<AdminCheckInResult> {
 	try {
+		const normalizedCode = code.toUpperCase().trim();
+
+		// First, check if this is a team member access code (AMG-TM-XXXXXXXX)
+		if (normalizedCode.startsWith('AMG-TM-')) {
+			return await handleTeamMemberCheckIn(normalizedCode);
+		}
+
 		// Try to find membership by membershipNumber or accessCode
 		const membership = await prisma.membership.findFirst({
 			where: {
 				OR: [
-					{ membershipNumber: code.toUpperCase() },
-					{ accessCode: code.toUpperCase() },
+					{ membershipNumber: normalizedCode },
+					{ accessCode: normalizedCode },
 				],
 			},
 			include: {
@@ -1126,10 +1168,22 @@ export async function adminCheckInByCode(
 					where: { checkOutTime: null },
 					take: 1,
 				},
+				teamMembers: {
+					where: { isActive: true },
+					select: { id: true, name: true, isPrimary: true },
+				},
 			},
 		});
 
 		if (!membership) {
+			// Could also be a team member access code without the AMG-TM- prefix
+			const teamMember = await prisma.membershipMember.findFirst({
+				where: { accessCode: normalizedCode },
+			});
+			if (teamMember) {
+				return await handleTeamMemberCheckIn(normalizedCode);
+			}
+
 			return {
 				success: false,
 				message: 'Membership not found. Please check the code.',
@@ -1148,6 +1202,14 @@ export async function adminCheckInByCode(
 			return {
 				success: false,
 				message: 'Membership has expired.',
+			};
+		}
+
+		// For team memberships with maxMembers > 1, require team member-specific check-ins
+		if (membership.maxMembers > 1 && membership.teamMembers.length > 0) {
+			return {
+				success: false,
+				message: `This is a team membership with ${membership.teamMembers.length} members. Each member must scan their own QR code to check in.`,
 			};
 		}
 
@@ -1386,6 +1448,292 @@ export async function getMembershipByCode(code: string): Promise<{
 		return {
 			success: false,
 			message: 'Failed to fetch membership',
+		};
+	}
+}
+
+// ============================================
+// TEAM MEMBER CHECK-IN HANDLER
+// ============================================
+
+/**
+ * Handle check-in/check-out for team members using their personal access code
+ * This ensures occupancy tracking is correct for team memberships
+ */
+async function handleTeamMemberCheckIn(
+	accessCode: string
+): Promise<AdminCheckInResult> {
+	try {
+		// Find team member by access code
+		const teamMember = await prisma.membershipMember.findUnique({
+			where: { accessCode },
+			include: {
+				membership: {
+					include: {
+						user: {
+							select: {
+								id: true,
+								name: true,
+								email: true,
+								phone: true,
+							},
+						},
+						space: {
+							select: {
+								id: true,
+								name: true,
+								slug: true,
+								images: true,
+							},
+						},
+						pricingPlan: {
+							select: {
+								id: true,
+								name: true,
+								price: true,
+								unit: true,
+							},
+						},
+					},
+				},
+				user: {
+					select: {
+						id: true,
+						name: true,
+						email: true,
+					},
+				},
+			},
+		});
+
+		if (!teamMember) {
+			return {
+				success: false,
+				message: 'Team member not found. Please check the access code.',
+			};
+		}
+
+		if (!teamMember.isActive) {
+			return {
+				success: false,
+				message: `${teamMember.name} has been deactivated. Please contact support.`,
+			};
+		}
+
+		const membership = teamMember.membership;
+
+		if (membership.status !== 'ACTIVE') {
+			return {
+				success: false,
+				message: `Membership is ${membership.status.toLowerCase()}. Cannot check in.`,
+			};
+		}
+
+		if (new Date(membership.endDate) < new Date()) {
+			return {
+				success: false,
+				message: 'Membership has expired.',
+			};
+		}
+
+		// Check for active check-in for this specific team member
+		const activeCheckIn = await prisma.membershipCheckIn.findFirst({
+			where: {
+				membershipId: membership.id,
+				memberId: teamMember.id,
+				checkOutTime: null,
+			},
+		});
+
+		// Calculate attendance
+		const now = new Date();
+		const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+		const thisMonthVisits = await prisma.membershipCheckIn.count({
+			where: {
+				membershipId: membership.id,
+				memberId: teamMember.id,
+				checkInTime: { gte: startOfMonth },
+			},
+		});
+
+		const totalVisits = await prisma.membershipCheckIn.count({
+			where: {
+				membershipId: membership.id,
+				memberId: teamMember.id,
+			},
+		});
+
+		let daysRemaining: number | null = null;
+		if (membership.daysAllowed !== null) {
+			const usedDays = await prisma.membershipCheckIn.count({
+				where: {
+					membershipId: membership.id,
+					memberId: teamMember.id,
+					checkInTime: { gte: membership.startDate },
+				},
+			});
+			daysRemaining = Math.max(0, membership.daysAllowed - usedDays);
+		}
+
+		if (activeCheckIn) {
+			// Check out this team member
+			const result = await prisma.$transaction(async (tx) => {
+				await tx.membershipCheckIn.update({
+					where: { id: activeCheckIn.id },
+					data: { checkOutTime: new Date() },
+				});
+
+				const updatedMembership = await tx.membership.update({
+					where: { id: membership.id },
+					data: {
+						currentOccupancy: {
+							decrement: 1,
+						},
+					},
+				});
+
+				return updatedMembership;
+			});
+
+			await prisma.activityLog.create({
+				data: {
+					userId: teamMember.userId || membership.userId,
+					action: 'membership.team_member_checkout',
+					entityType: 'MembershipCheckIn',
+					entityId: activeCheckIn.id,
+					metadata: {
+						membershipId: membership.id,
+						teamMemberId: teamMember.id,
+						teamMemberName: teamMember.name,
+						adminAction: true,
+					},
+				},
+			});
+
+			revalidatePath('/dashboard');
+			revalidatePath('/dashboard/subscriptions');
+			revalidatePath('/admin/scanner');
+			revalidatePath('/admin/members');
+
+			return {
+				success: true,
+				message: `${teamMember.name} has been checked out successfully.`,
+				data: {
+					membership: membership as MembershipWithRelations,
+					action: 'checked_out',
+					attendance: {
+						totalVisits,
+						thisMonthVisits,
+						daysAllowed: membership.daysAllowed,
+						daysRemaining,
+					},
+					teamMember: {
+						id: teamMember.id,
+						name: teamMember.name,
+						isPrimary: teamMember.isPrimary,
+					},
+					occupancy: {
+						current: Math.max(0, result.currentOccupancy),
+						max: result.maxMembers,
+					},
+				},
+			};
+		}
+
+		// Check in this team member
+		// First, verify occupancy limit
+		if (membership.currentOccupancy >= membership.maxMembers) {
+			return {
+				success: false,
+				message: `Maximum occupancy (${membership.maxMembers}) reached. Someone must check out first.`,
+			};
+		}
+
+		// For fixed-day subscriptions, check if days remaining
+		if (
+			membership.daysAllowed !== null &&
+			daysRemaining !== null &&
+			daysRemaining <= 0
+		) {
+			return {
+				success: false,
+				message: `${teamMember.name} has used all ${membership.daysAllowed} days for this billing period.`,
+			};
+		}
+
+		const result = await prisma.$transaction(async (tx) => {
+			const checkIn = await tx.membershipCheckIn.create({
+				data: {
+					membershipId: membership.id,
+					memberId: teamMember.id,
+					checkInTime: new Date(),
+				},
+			});
+
+			const updatedMembership = await tx.membership.update({
+				where: { id: membership.id },
+				data: {
+					currentOccupancy: {
+						increment: 1,
+					},
+				},
+			});
+
+			return { checkIn, membership: updatedMembership };
+		});
+
+		await prisma.activityLog.create({
+			data: {
+				userId: teamMember.userId || membership.userId,
+				action: 'membership.team_member_checkin',
+				entityType: 'MembershipCheckIn',
+				entityId: result.checkIn.id,
+				metadata: {
+					membershipId: membership.id,
+					teamMemberId: teamMember.id,
+					teamMemberName: teamMember.name,
+					adminAction: true,
+				},
+			},
+		});
+
+		revalidatePath('/dashboard');
+		revalidatePath('/dashboard/subscriptions');
+		revalidatePath('/admin/scanner');
+		revalidatePath('/admin/members');
+
+		return {
+			success: true,
+			message: `${teamMember.name} has been checked in successfully. (${result.membership.currentOccupancy}/${result.membership.maxMembers} present)`,
+			data: {
+				membership: membership as MembershipWithRelations,
+				checkInId: result.checkIn.id,
+				action: 'checked_in',
+				attendance: {
+					totalVisits: totalVisits + 1,
+					thisMonthVisits: thisMonthVisits + 1,
+					daysAllowed: membership.daysAllowed,
+					daysRemaining:
+						daysRemaining !== null ? daysRemaining - 1 : null,
+				},
+				teamMember: {
+					id: teamMember.id,
+					name: teamMember.name,
+					isPrimary: teamMember.isPrimary,
+				},
+				occupancy: {
+					current: result.membership.currentOccupancy,
+					max: result.membership.maxMembers,
+				},
+			},
+		};
+	} catch (error) {
+		console.error('Team member check-in error:', error);
+		return {
+			success: false,
+			message:
+				'Failed to process team member check-in. Please try again.',
 		};
 	}
 }
