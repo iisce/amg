@@ -10,6 +10,7 @@ import {
 	AlertDialogDescription,
 } from '@/components/ui/alert-dialog';
 import { CancelSubscriptionForm } from './cancel-subscription-form';
+import { SubscriptionQRCode } from './subscription-qr-code';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -492,6 +493,17 @@ export default async function SubscriptionDetailPage({ params }: PageProps) {
 							</Card>
 						</div>
 					</div>
+
+					{/* QR Code for Active Subscriptions */}
+					{subscription.status === 'ACTIVE' &&
+						subscription.accessCode && (
+							<SubscriptionQRCode
+								membershipId={subscription.id}
+								membershipNumber={subscription.membershipNumber}
+								accessCode={subscription.accessCode}
+								spaceName={subscription.space.name}
+							/>
+						)}
 
 					{/* Recent Attendance */}
 					{attendance && attendance.checkIns.length > 0 && (

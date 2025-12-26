@@ -1,12 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+	Card,
+	CardContent,
+	CardHeader,
+	CardTitle,
+	CardDescription,
+} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 import {
 	QrCode,
 	CheckCircle2,
@@ -17,71 +25,264 @@ import {
 	UserCog,
 	FileText,
 	Loader2,
+	Camera,
+	CameraOff,
+	User,
+	MapPin,
+	Clock,
+	LogIn,
+	LogOut,
+	History,
+	AlertTriangle,
+	RefreshCw,
 } from 'lucide-react';
-import { checkInByQRCode } from '@/actions';
-import type { BookingWithRelations } from '@/actions/bookings';
+import {
+	adminCheckInByCode,
+	getMembershipByCode,
+	type AdminCheckInResult,
+	type MembershipWithRelations,
+} from '@/actions/subscriptions';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
-interface CheckInResult {
-	success: boolean;
-	booking?: BookingWithRelations;
-	message: string;
+interface MembershipData {
+	membership: MembershipWithRelations;
+	isCheckedIn: boolean;
+	attendance: {
+		totalVisits: number;
+		thisMonthVisits: number;
+		daysAllowed: number | null;
+		daysRemaining: number | null;
+		recentCheckIns: Array<{
+			id: string;
+			checkInTime: Date;
+			checkOutTime: Date | null;
+		}>;
+	};
 }
 
 export default function QRScannerClient() {
 	const [manualCode, setManualCode] = useState('');
 	const [isLoading, setIsLoading] = useState(false);
-	const [scanResult, setScanResult] = useState<CheckInResult | null>(null);
+	const [isScanning, setIsScanning] = useState(false);
+	const [cameraError, setCameraError] = useState<string | null>(null);
+	const [lastResult, setLastResult] = useState<AdminCheckInResult | null>(
+		null
+	);
+	const [membershipData, setMembershipData] = useState<MembershipData | null>(
+		null
+	);
+	const [activeTab, setActiveTab] = useState<'scanner' | 'manual'>('scanner');
 
-	const handleManualCheckIn = async (e: React.FormEvent) => {
+	const videoRef = useRef<HTMLVideoElement>(null);
+	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const streamRef = useRef<MediaStream | null>(null);
+	const scanIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+	const stopCamera = useCallback(() => {
+		if (scanIntervalRef.current) {
+			clearInterval(scanIntervalRef.current);
+			scanIntervalRef.current = null;
+		}
+		if (streamRef.current) {
+			streamRef.current.getTracks().forEach((track) => track.stop());
+			streamRef.current = null;
+		}
+		setIsScanning(false);
+	}, []);
+
+	// Clean up camera on unmount
+	useEffect(() => {
+		return () => {
+			stopCamera();
+		};
+	}, [stopCamera]);
+
+	const processCheckIn = async (code: string) => {
+		if (!code.trim() || isLoading) return;
+
+		setIsLoading(true);
+		setLastResult(null);
+		setMembershipData(null);
+
+		try {
+			const result = await adminCheckInByCode(code.trim());
+
+			if (result.success && result.data) {
+				setLastResult(result);
+				toast.success(result.message);
+
+				// Fetch full membership data for display
+				const membershipResult = await getMembershipByCode(code.trim());
+				if (membershipResult.success && membershipResult.data) {
+					setMembershipData(membershipResult.data);
+				}
+			} else {
+				setLastResult(result);
+				toast.error(result.message);
+			}
+		} catch (error) {
+			console.error('Check-in error:', error);
+			toast.error('An error occurred. Please try again.');
+		} finally {
+			setIsLoading(false);
+			setManualCode('');
+		}
+	};
+
+	const handleCodeScanned = async (rawCode: string) => {
+		if (isLoading) return;
+
+		let code = rawCode;
+
+		// Try to parse as JSON (QR code format from client app)
+		try {
+			const parsed = JSON.parse(rawCode);
+			if (parsed.membershipNumber) {
+				code = parsed.membershipNumber;
+			} else if (parsed.accessCode) {
+				code = parsed.accessCode;
+			}
+		} catch {
+			// Not JSON, use raw code
+		}
+
+		await processCheckIn(code);
+	};
+
+	const scanQRCode = useCallback(async () => {
+		if (!videoRef.current || !canvasRef.current || isLoading) return;
+
+		const video = videoRef.current;
+		const canvas = canvasRef.current;
+		const ctx = canvas.getContext('2d');
+
+		if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+		canvas.width = video.videoWidth;
+		canvas.height = video.videoHeight;
+		ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+		const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+		// Use BarcodeDetector API if available (modern browsers)
+		if ('BarcodeDetector' in window) {
+			try {
+				// @ts-expect-error - BarcodeDetector is not in TypeScript types yet
+				const barcodeDetector = new window.BarcodeDetector({
+					formats: ['qr_code'],
+				});
+				const barcodes = await barcodeDetector.detect(imageData);
+
+				if (barcodes.length > 0) {
+					const code = barcodes[0].rawValue;
+					await handleCodeScanned(code);
+				}
+			} catch {
+				// BarcodeDetector failed, silently continue
+			}
+		}
+	}, [isLoading]);
+
+	const startScanning = useCallback(() => {
+		if (scanIntervalRef.current) return;
+
+		scanIntervalRef.current = setInterval(() => {
+			scanQRCode();
+		}, 250); // Scan 4 times per second
+	}, [scanQRCode]);
+
+	// Attach stream to video element when isScanning becomes true
+	useEffect(() => {
+		if (isScanning && streamRef.current && videoRef.current && !videoRef.current.srcObject) {
+			videoRef.current.srcObject = streamRef.current;
+			
+			videoRef.current.onloadedmetadata = async () => {
+				try {
+					await videoRef.current?.play();
+					startScanning();
+				} catch (playError) {
+					console.error('Video play error:', playError);
+					setCameraError('Could not start video playback.');
+					setIsScanning(false);
+				}
+			};
+		}
+	}, [isScanning, startScanning]);
+
+	const startCamera = async () => {
+		try {
+			setCameraError(null);
+
+			const stream = await navigator.mediaDevices.getUserMedia({
+				video: {
+					facingMode: 'environment',
+					width: { ideal: 1280 },
+					height: { ideal: 720 },
+				},
+			});
+
+			streamRef.current = stream;
+			setIsScanning(true); // This will trigger the useEffect above to attach stream
+		} catch (error) {
+			console.error('Camera error:', error);
+			setCameraError(
+				'Could not access camera. Please ensure you have granted camera permissions.'
+			);
+			setIsScanning(false);
+		}
+	};
+
+	const handleManualSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
+		await processCheckIn(manualCode);
+	};
 
+	const handleLookup = async () => {
 		if (!manualCode.trim()) {
-			toast.error('Please enter a booking code');
+			toast.error('Please enter a membership code');
 			return;
 		}
 
 		setIsLoading(true);
-		setScanResult(null);
+		setLastResult(null);
+		setMembershipData(null);
 
 		try {
-			const result = await checkInByQRCode(manualCode.trim());
+			const result = await getMembershipByCode(manualCode.trim());
 
 			if (result.success && result.data) {
-				// Handle both single booking and array of bookings
-				const booking = Array.isArray(result.data)
-					? result.data[0]
-					: result.data;
-
-				setScanResult({
-					success: true,
-					booking: booking,
-					message: result.message || 'Check-in successful!',
-				});
-				toast.success('Check-in successful!');
-				setManualCode('');
+				setMembershipData(result.data);
+				toast.success('Membership found');
 			} else {
-				setScanResult({
-					success: false,
-					message:
-						result.error ||
-						result.message ||
-						'Invalid booking code',
-				});
-				toast.error(
-					result.error || result.message || 'Invalid booking code'
-				);
+				toast.error(result.message);
 			}
 		} catch (error) {
-			console.error('Check-in error:', error);
-			setScanResult({
-				success: false,
-				message: 'An error occurred during check-in',
-			});
-			toast.error('An error occurred during check-in');
+			console.error('Lookup error:', error);
+			toast.error('Failed to lookup membership');
 		} finally {
 			setIsLoading(false);
+		}
+	};
+
+	const handleReset = () => {
+		setLastResult(null);
+		setMembershipData(null);
+		setManualCode('');
+	};
+
+	const getStatusBadge = (status: string) => {
+		switch (status) {
+			case 'ACTIVE':
+				return <Badge className='bg-green-600'>Active</Badge>;
+			case 'PAUSED':
+				return <Badge variant='secondary'>Paused</Badge>;
+			case 'EXPIRED':
+				return <Badge variant='destructive'>Expired</Badge>;
+			case 'CANCELLED':
+				return <Badge variant='destructive'>Cancelled</Badge>;
+			default:
+				return <Badge variant='outline'>{status}</Badge>;
 		}
 	};
 
@@ -98,10 +299,11 @@ export default function QRScannerClient() {
 								</Badge>
 							</div>
 							<h1 className='text-2xl font-bold'>
-								QR Code Scanner
+								Member Check-In Scanner
 							</h1>
 							<p className='text-sm text-muted-foreground mt-1'>
-								Check in guests with their booking QR codes
+								Scan member QR codes or enter membership numbers
+								to check in/out
 							</p>
 						</div>
 					</div>
@@ -152,7 +354,7 @@ export default function QRScannerClient() {
 							className='flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 border-primary text-foreground'
 						>
 							<QrCode className='h-4 w-4' />
-							QR Scanner
+							Scanner
 						</Link>
 					</nav>
 				</div>
@@ -160,139 +362,355 @@ export default function QRScannerClient() {
 
 			{/* Content */}
 			<section className='px-4 py-8'>
-				<div className='container mx-auto max-w-4xl'>
-					<div className='grid gap-6 md:grid-cols-2'>
-						{/* Manual Entry */}
-						<Card>
-							<CardHeader>
-								<CardTitle className='flex items-center gap-2'>
-									<Keyboard className='h-5 w-5' />
-									Manual Entry
-								</CardTitle>
-							</CardHeader>
-							<CardContent>
-								<form
-									onSubmit={handleManualCheckIn}
-									className='space-y-4'
-								>
-									<div className='space-y-2'>
-										<Label htmlFor='bookingCode'>
-											Booking Code
-										</Label>
-										<Input
-											id='bookingCode'
-											placeholder='Enter QR code or booking number'
-											value={manualCode}
-											onChange={(e) =>
-												setManualCode(e.target.value)
-											}
-											disabled={isLoading}
-											autoComplete='off'
-										/>
-										<p className='text-xs text-muted-foreground'>
-											Enter the code from the guest's
-											booking confirmation
-										</p>
-									</div>
-									<Button
-										type='submit'
-										className='w-full'
-										disabled={
-											isLoading || !manualCode.trim()
-										}
+				<div className='container mx-auto max-w-6xl'>
+					<div className='grid gap-6 lg:grid-cols-2'>
+						{/* Scanner / Input Section */}
+						<div className='space-y-6'>
+							<Tabs
+								value={activeTab}
+								onValueChange={(v) =>
+									setActiveTab(v as 'scanner' | 'manual')
+								}
+							>
+								<TabsList className='grid w-full grid-cols-2'>
+									<TabsTrigger
+										value='scanner'
+										className='flex items-center gap-2'
 									>
-										{isLoading && (
-											<Loader2 className='mr-2 h-4 w-4 animate-spin' />
-										)}
-										Check In
-									</Button>
-								</form>
-							</CardContent>
-						</Card>
+										<Camera className='h-4 w-4' />
+										Camera Scanner
+									</TabsTrigger>
+									<TabsTrigger
+										value='manual'
+										className='flex items-center gap-2'
+									>
+										<Keyboard className='h-4 w-4' />
+										Manual Entry
+									</TabsTrigger>
+								</TabsList>
 
-						{/* Instructions */}
-						<Card>
-							<CardHeader>
-								<CardTitle className='flex items-center gap-2'>
-									<QrCode className='h-5 w-5' />
-									How to Use
-								</CardTitle>
-							</CardHeader>
-							<CardContent>
-								<div className='space-y-4'>
-									<div className='flex gap-3'>
-										<div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold'>
-											1
-										</div>
-										<div>
-											<p className='font-medium'>
-												Get the Code
-											</p>
-											<p className='text-sm text-muted-foreground'>
-												Ask the guest for their booking
-												QR code or booking number
-											</p>
-										</div>
-									</div>
-									<div className='flex gap-3'>
-										<div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold'>
-											2
-										</div>
-										<div>
-											<p className='font-medium'>
-												Enter Code
-											</p>
-											<p className='text-sm text-muted-foreground'>
-												Type the code in the manual
-												entry field
-											</p>
-										</div>
-									</div>
-									<div className='flex gap-3'>
-										<div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold'>
-											3
-										</div>
-										<div>
-											<p className='font-medium'>
-												Verify
-											</p>
-											<p className='text-sm text-muted-foreground'>
-												Confirm the guest details match
-												and check them in
-											</p>
-										</div>
-									</div>
-								</div>
-							</CardContent>
-						</Card>
-					</div>
+								<TabsContent
+									value='scanner'
+									className='mt-4'
+								>
+									<Card>
+										<CardHeader>
+											<CardTitle className='flex items-center gap-2'>
+												<QrCode className='h-5 w-5' />
+												Scan Member QR Code
+											</CardTitle>
+											<CardDescription>
+												Point the camera at the
+												member&apos;s QR code to
+												check-in or check-out
+											</CardDescription>
+										</CardHeader>
+										<CardContent>
+											<div className='space-y-4'>
+												{/* Camera View */}
+												<div className='relative aspect-video bg-muted rounded-lg overflow-hidden'>
+													{isScanning ? (
+														<>
+															<video
+																ref={videoRef}
+																className='absolute inset-0 w-full h-full object-cover z-0'
+																autoPlay
+																playsInline
+																muted
+															/>
+															{/* Scanning overlay - pointer-events-none so it doesn't block video */}
+															<div className='absolute inset-0 flex items-center justify-center pointer-events-none z-10'>
+																<div className='w-48 h-48 border-2 border-primary rounded-lg animate-pulse' />
+															</div>
+															{isLoading && (
+																<div className='absolute inset-0 bg-black/50 flex items-center justify-center z-20'>
+																	<Loader2 className='h-8 w-8 animate-spin text-white' />
+																</div>
+															)}
+														</>
+													) : (
+														<div className='absolute inset-0 flex flex-col items-center justify-center text-muted-foreground'>
+															{cameraError ? (
+																<>
+																	<CameraOff className='h-12 w-12 mb-2' />
+																	<p className='text-sm text-center px-4'>
+																		{
+																			cameraError
+																		}
+																	</p>
+																</>
+															) : (
+																<>
+																	<Camera className='h-12 w-12 mb-2' />
+																	<p className='text-sm'>
+																		Camera
+																		not
+																		active
+																	</p>
+																</>
+															)}
+														</div>
+													)}
+												</div>
 
-					{/* Result Display */}
-					{scanResult && (
-						<Card className='mt-6'>
-							<CardContent className='pt-6'>
-								{scanResult.success && scanResult.booking ? (
+												{/* Hidden canvas for QR processing */}
+												<canvas
+													ref={canvasRef}
+													className='hidden'
+												/>
+
+												{/* Camera controls */}
+												<div className='flex gap-2'>
+													{isScanning ? (
+														<Button
+															variant='outline'
+															onClick={stopCamera}
+															className='flex-1'
+														>
+															<CameraOff className='mr-2 h-4 w-4' />
+															Stop Camera
+														</Button>
+													) : (
+														<Button
+															onClick={
+																startCamera
+															}
+															className='flex-1'
+														>
+															<Camera className='mr-2 h-4 w-4' />
+															Start Camera
+														</Button>
+													)}
+												</div>
+
+												{/* Note about browser support */}
+												<p className='text-xs text-muted-foreground text-center'>
+													QR scanning requires a
+													modern browser with camera
+													access and BarcodeDetector
+													API support.
+												</p>
+											</div>
+										</CardContent>
+									</Card>
+								</TabsContent>
+
+								<TabsContent
+									value='manual'
+									className='mt-4'
+								>
+									<Card>
+										<CardHeader>
+											<CardTitle className='flex items-center gap-2'>
+												<Keyboard className='h-5 w-5' />
+												Manual Entry
+											</CardTitle>
+											<CardDescription>
+												Enter the membership number or
+												access code
+											</CardDescription>
+										</CardHeader>
+										<CardContent>
+											<form
+												onSubmit={handleManualSubmit}
+												className='space-y-4'
+											>
+												<div className='space-y-2'>
+													<Label htmlFor='membershipCode'>
+														Membership Code
+													</Label>
+													<Input
+														id='membershipCode'
+														placeholder='AMG-MB-XXXXX or access code'
+														value={manualCode}
+														onChange={(e) =>
+															setManualCode(
+																e.target.value.toUpperCase()
+															)
+														}
+														disabled={isLoading}
+														autoComplete='off'
+														className='font-mono'
+													/>
+													<p className='text-xs text-muted-foreground'>
+														Enter membership number
+														(AMG-MB-...) or 8-digit
+														access code
+													</p>
+												</div>
+												<div className='flex gap-2'>
+													<Button
+														type='submit'
+														className='flex-1'
+														disabled={
+															isLoading ||
+															!manualCode.trim()
+														}
+													>
+														{isLoading ? (
+															<Loader2 className='mr-2 h-4 w-4 animate-spin' />
+														) : (
+															<QrCode className='mr-2 h-4 w-4' />
+														)}
+														Check In/Out
+													</Button>
+													<Button
+														type='button'
+														variant='outline'
+														onClick={handleLookup}
+														disabled={
+															isLoading ||
+															!manualCode.trim()
+														}
+													>
+														Lookup
+													</Button>
+												</div>
+											</form>
+										</CardContent>
+									</Card>
+								</TabsContent>
+							</Tabs>
+
+							{/* Instructions */}
+							<Card>
+								<CardHeader>
+									<CardTitle className='text-lg'>
+										How It Works
+									</CardTitle>
+								</CardHeader>
+								<CardContent>
 									<div className='space-y-4'>
-										<div className='flex items-center gap-3 text-green-600'>
-											<CheckCircle2 className='h-8 w-8' />
+										<div className='flex gap-3'>
+											<div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold'>
+												1
+											</div>
 											<div>
-												<h3 className='text-xl font-bold'>
-													Check-in Successful!
-												</h3>
+												<p className='font-medium'>
+													Scan or Enter Code
+												</p>
 												<p className='text-sm text-muted-foreground'>
-													{scanResult.message}
+													Use the camera to scan the
+													member&apos;s QR code or
+													enter their membership
+													number manually
 												</p>
 											</div>
 										</div>
+										<div className='flex gap-3'>
+											<div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold'>
+												2
+											</div>
+											<div>
+												<p className='font-medium'>
+													Automatic Toggle
+												</p>
+												<p className='text-sm text-muted-foreground'>
+													The system automatically
+													checks in if not checked in,
+													or checks out if already
+													checked in
+												</p>
+											</div>
+										</div>
+										<div className='flex gap-3'>
+											<div className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold'>
+												3
+											</div>
+											<div>
+												<p className='font-medium'>
+													View Details
+												</p>
+												<p className='text-sm text-muted-foreground'>
+													See member info,
+													subscription status, and
+													usage statistics
+												</p>
+											</div>
+										</div>
+									</div>
+								</CardContent>
+							</Card>
+						</div>
 
-										<div className='grid gap-4 md:grid-cols-2 pt-4 border-t'>
+						{/* Result Section */}
+						<div className='space-y-6'>
+							{/* Result Display */}
+							{lastResult && (
+								<Card
+									className={
+										lastResult.success
+											? 'border-green-500'
+											: 'border-red-500'
+									}
+								>
+									<CardContent className='pt-6'>
+										<div className='flex items-start gap-4'>
+											{lastResult.success ? (
+												<div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-green-100'>
+													{lastResult.data?.action ===
+													'checked_in' ? (
+														<LogIn className='h-6 w-6 text-green-600' />
+													) : (
+														<LogOut className='h-6 w-6 text-green-600' />
+													)}
+												</div>
+											) : (
+												<div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100'>
+													<XCircle className='h-6 w-6 text-red-600' />
+												</div>
+											)}
+											<div className='flex-1'>
+												<h3 className='text-xl font-bold'>
+													{lastResult.success
+														? lastResult.data
+																?.action ===
+														  'checked_in'
+															? 'Checked In'
+															: 'Checked Out'
+														: 'Error'}
+												</h3>
+												<p className='text-muted-foreground'>
+													{lastResult.message}
+												</p>
+											</div>
+											<Button
+												variant='ghost'
+												size='sm'
+												onClick={handleReset}
+											>
+												<RefreshCw className='h-4 w-4' />
+											</Button>
+										</div>
+									</CardContent>
+								</Card>
+							)}
+
+							{/* Member Details */}
+							{membershipData && (
+								<Card>
+									<CardHeader>
+										<div className='flex items-center justify-between'>
+											<CardTitle className='flex items-center gap-2'>
+												<User className='h-5 w-5' />
+												Member Details
+											</CardTitle>
+											{getStatusBadge(
+												membershipData.membership.status
+											)}
+										</div>
+									</CardHeader>
+									<CardContent className='space-y-6'>
+										{/* Member Info */}
+										<div className='grid gap-4 sm:grid-cols-2'>
 											<div>
 												<p className='text-sm font-medium text-muted-foreground'>
-													Guest Name
+													Name
 												</p>
 												<p className='text-lg font-semibold'>
 													{
-														scanResult.booking.user
+														membershipData
+															.membership.user
 															.name
 													}
 												</p>
@@ -301,81 +719,304 @@ export default function QRScannerClient() {
 												<p className='text-sm font-medium text-muted-foreground'>
 													Email
 												</p>
-												<p className='text-lg font-semibold'>
+												<p className='font-medium'>
 													{
-														scanResult.booking.user
+														membershipData
+															.membership.user
 															.email
 													}
 												</p>
 											</div>
 											<div>
 												<p className='text-sm font-medium text-muted-foreground'>
-													Space
+													Phone
 												</p>
-												<p className='text-lg font-semibold'>
-													{
-														scanResult.booking.space
-															.name
-													}
+												<p className='font-medium'>
+													{membershipData.membership
+														.user.phone || 'N/A'}
 												</p>
 											</div>
 											<div>
 												<p className='text-sm font-medium text-muted-foreground'>
-													Booking Number
+													Membership #
 												</p>
-												<p className='text-lg font-semibold'>
+												<p className='font-mono font-medium'>
 													{
-														scanResult.booking
-															.bookingNumber
+														membershipData
+															.membership
+															.membershipNumber
 													}
 												</p>
 											</div>
-											<div>
-												<p className='text-sm font-medium text-muted-foreground'>
-													Time Slot
-												</p>
-												<p className='text-lg font-semibold'>
-													{format(
-														new Date(
-															scanResult.booking.startTime
-														),
-														'h:mm a'
-													)}{' '}
-													-{' '}
-													{format(
-														new Date(
-															scanResult.booking.endTime
-														),
-														'h:mm a'
+										</div>
+
+										<Separator />
+
+										{/* Subscription Info */}
+										<div className='space-y-3'>
+											<h4 className='font-semibold flex items-center gap-2'>
+												<MapPin className='h-4 w-4' />
+												Subscription
+											</h4>
+											<div className='grid gap-4 sm:grid-cols-2'>
+												<div>
+													<p className='text-sm text-muted-foreground'>
+														Space
+													</p>
+													<p className='font-medium'>
+														{
+															membershipData
+																.membership
+																.space.name
+														}
+													</p>
+												</div>
+												<div>
+													<p className='text-sm text-muted-foreground'>
+														Plan
+													</p>
+													<p className='font-medium'>
+														{
+															membershipData
+																.membership
+																.pricingPlan
+																.name
+														}
+													</p>
+												</div>
+												<div>
+													<p className='text-sm text-muted-foreground'>
+														Valid Until
+													</p>
+													<p className='font-medium'>
+														{format(
+															new Date(
+																membershipData.membership.endDate
+															),
+															'MMM d, yyyy'
+														)}
+													</p>
+												</div>
+												<div>
+													<p className='text-sm text-muted-foreground'>
+														Current Status
+													</p>
+													<div className='flex items-center gap-2'>
+														{membershipData.isCheckedIn ? (
+															<Badge className='bg-green-600'>
+																<CheckCircle2 className='mr-1 h-3 w-3' />
+																Checked In
+															</Badge>
+														) : (
+															<Badge variant='outline'>
+																Not Checked In
+															</Badge>
+														)}
+													</div>
+												</div>
+											</div>
+										</div>
+
+										<Separator />
+
+										{/* Usage Statistics */}
+										<div className='space-y-3'>
+											<h4 className='font-semibold flex items-center gap-2'>
+												<Clock className='h-4 w-4' />
+												Usage Statistics
+											</h4>
+											<div className='grid gap-4 grid-cols-2 sm:grid-cols-4'>
+												<div className='bg-muted rounded-lg p-3 text-center'>
+													<p className='text-2xl font-bold'>
+														{
+															membershipData
+																.attendance
+																.totalVisits
+														}
+													</p>
+													<p className='text-xs text-muted-foreground'>
+														Total Visits
+													</p>
+												</div>
+												<div className='bg-muted rounded-lg p-3 text-center'>
+													<p className='text-2xl font-bold'>
+														{
+															membershipData
+																.attendance
+																.thisMonthVisits
+														}
+													</p>
+													<p className='text-xs text-muted-foreground'>
+														This Month
+													</p>
+												</div>
+												{membershipData.attendance
+													.daysAllowed !== null && (
+													<>
+														<div className='bg-muted rounded-lg p-3 text-center'>
+															<p className='text-2xl font-bold'>
+																{
+																	membershipData
+																		.attendance
+																		.daysAllowed
+																}
+															</p>
+															<p className='text-xs text-muted-foreground'>
+																Days Allowed
+															</p>
+														</div>
+														<div className='bg-muted rounded-lg p-3 text-center'>
+															<p
+																className={`text-2xl font-bold ${
+																	membershipData
+																		.attendance
+																		.daysRemaining ===
+																	0
+																		? 'text-red-600'
+																		: ''
+																}`}
+															>
+																{
+																	membershipData
+																		.attendance
+																		.daysRemaining
+																}
+															</p>
+															<p className='text-xs text-muted-foreground'>
+																Days Remaining
+															</p>
+														</div>
+													</>
+												)}
+											</div>
+
+											{membershipData.attendance
+												.daysRemaining === 0 &&
+												membershipData.attendance
+													.daysAllowed !== null && (
+													<div className='flex items-center gap-2 text-amber-600 bg-amber-50 p-3 rounded-lg'>
+														<AlertTriangle className='h-4 w-4' />
+														<p className='text-sm'>
+															Member has used all
+															allocated days for
+															this period
+														</p>
+													</div>
+												)}
+										</div>
+
+										<Separator />
+
+										{/* Recent Check-ins */}
+										<div className='space-y-3'>
+											<h4 className='font-semibold flex items-center gap-2'>
+												<History className='h-4 w-4' />
+												Recent Activity
+											</h4>
+											{membershipData.attendance
+												.recentCheckIns.length > 0 ? (
+												<div className='space-y-2 max-h-48 overflow-y-auto'>
+													{membershipData.attendance.recentCheckIns.map(
+														(checkIn) => (
+															<div
+																key={checkIn.id}
+																className='flex items-center justify-between text-sm bg-muted/50 rounded-lg px-3 py-2'
+															>
+																<div className='flex items-center gap-2'>
+																	<LogIn className='h-3 w-3 text-green-600' />
+																	<span>
+																		{format(
+																			new Date(
+																				checkIn.checkInTime
+																			),
+																			'MMM d, h:mm a'
+																		)}
+																	</span>
+																</div>
+																{checkIn.checkOutTime ? (
+																	<div className='flex items-center gap-2 text-muted-foreground'>
+																		<LogOut className='h-3 w-3' />
+																		<span>
+																			{format(
+																				new Date(
+																					checkIn.checkOutTime
+																				),
+																				'h:mm a'
+																			)}
+																		</span>
+																	</div>
+																) : (
+																	<Badge
+																		variant='outline'
+																		className='text-xs'
+																	>
+																		Active
+																	</Badge>
+																)}
+															</div>
+														)
 													)}
+												</div>
+											) : (
+												<p className='text-sm text-muted-foreground'>
+													No recent activity
 												</p>
-											</div>
-											<div>
-												<p className='text-sm font-medium text-muted-foreground'>
-													Status
-												</p>
-												<Badge variant='default'>
-													{scanResult.booking.status}
-												</Badge>
-											</div>
+											)}
 										</div>
-									</div>
-								) : (
-									<div className='flex items-center gap-3 text-destructive'>
-										<XCircle className='h-8 w-8' />
-										<div>
-											<h3 className='text-xl font-bold'>
-												Check-in Failed
-											</h3>
-											<p className='text-sm text-muted-foreground'>
-												{scanResult.message}
-											</p>
-										</div>
-									</div>
-								)}
-							</CardContent>
-						</Card>
-					)}
+
+										{/* Quick Action */}
+										{membershipData.membership.status ===
+											'ACTIVE' && (
+											<Button
+												onClick={() =>
+													processCheckIn(
+														membershipData
+															.membership
+															.membershipNumber
+													)
+												}
+												disabled={isLoading}
+												className='w-full'
+												variant={
+													membershipData.isCheckedIn
+														? 'outline'
+														: 'default'
+												}
+											>
+												{isLoading ? (
+													<Loader2 className='mr-2 h-4 w-4 animate-spin' />
+												) : membershipData.isCheckedIn ? (
+													<LogOut className='mr-2 h-4 w-4' />
+												) : (
+													<LogIn className='mr-2 h-4 w-4' />
+												)}
+												{membershipData.isCheckedIn
+													? 'Check Out'
+													: 'Check In'}
+											</Button>
+										)}
+									</CardContent>
+								</Card>
+							)}
+
+							{/* Empty state */}
+							{!lastResult && !membershipData && (
+								<Card className='border-dashed'>
+									<CardContent className='py-12 text-center'>
+										<QrCode className='h-12 w-12 mx-auto text-muted-foreground mb-4' />
+										<h3 className='font-semibold mb-2'>
+											Ready to Scan
+										</h3>
+										<p className='text-sm text-muted-foreground'>
+											Scan a member&apos;s QR code or
+											enter their membership number to get
+											started
+										</p>
+									</CardContent>
+								</Card>
+							)}
+						</div>
+					</div>
 				</div>
 			</section>
 		</div>

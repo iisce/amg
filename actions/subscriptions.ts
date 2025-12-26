@@ -1075,3 +1075,317 @@ export async function getMembershipAttendance(
 		};
 	}
 }
+
+// ============================================
+// ADMIN CHECK-IN/CHECK-OUT ACTIONS
+// ============================================
+
+export interface AdminCheckInResult {
+	success: boolean;
+	message: string;
+	data?: {
+		membership: MembershipWithRelations;
+		checkInId?: string;
+		action: 'checked_in' | 'checked_out';
+		attendance: {
+			totalVisits: number;
+			thisMonthVisits: number;
+			daysAllowed: number | null;
+			daysRemaining: number | null;
+		};
+	};
+}
+
+/**
+ * Admin action to check in a member by membership number or access code
+ * No location constraints - just requires admin to be authenticated
+ */
+export async function adminCheckInByCode(
+	code: string
+): Promise<AdminCheckInResult> {
+	try {
+		// Try to find membership by membershipNumber or accessCode
+		const membership = await prisma.membership.findFirst({
+			where: {
+				OR: [
+					{ membershipNumber: code.toUpperCase() },
+					{ accessCode: code.toUpperCase() },
+				],
+			},
+			include: {
+				user: {
+					select: { id: true, name: true, email: true, phone: true },
+				},
+				space: {
+					select: { id: true, name: true, slug: true, images: true },
+				},
+				pricingPlan: {
+					select: { id: true, name: true, price: true, unit: true },
+				},
+				checkIns: {
+					where: { checkOutTime: null },
+					take: 1,
+				},
+			},
+		});
+
+		if (!membership) {
+			return {
+				success: false,
+				message: 'Membership not found. Please check the code.',
+			};
+		}
+
+		if (membership.status !== 'ACTIVE') {
+			return {
+				success: false,
+				message: `Membership is ${membership.status.toLowerCase()}. Cannot check in.`,
+			};
+		}
+
+		// Check if membership has expired
+		if (new Date(membership.endDate) < new Date()) {
+			return {
+				success: false,
+				message: 'Membership has expired.',
+			};
+		}
+
+		// Calculate attendance data
+		const now = new Date();
+		const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+		const thisMonthVisits = await prisma.membershipCheckIn.count({
+			where: {
+				membershipId: membership.id,
+				checkInTime: { gte: startOfMonth },
+			},
+		});
+
+		const totalVisits = await prisma.membershipCheckIn.count({
+			where: { membershipId: membership.id },
+		});
+
+		let daysRemaining: number | null = null;
+		if (membership.daysAllowed !== null) {
+			const usedDays = await prisma.membershipCheckIn.count({
+				where: {
+					membershipId: membership.id,
+					checkInTime: { gte: membership.startDate },
+				},
+			});
+			daysRemaining = Math.max(0, membership.daysAllowed - usedDays);
+		}
+
+		// Check if already checked in
+		if (membership.checkIns.length > 0) {
+			// User is checked in, perform check-out
+			const activeCheckIn = membership.checkIns[0];
+
+			await prisma.membershipCheckIn.update({
+				where: { id: activeCheckIn.id },
+				data: { checkOutTime: new Date() },
+			});
+
+			await prisma.activityLog.create({
+				data: {
+					userId: membership.userId,
+					action: 'membership.admin_checkout',
+					entityType: 'MembershipCheckIn',
+					entityId: activeCheckIn.id,
+					metadata: {
+						membershipId: membership.id,
+						adminAction: true,
+					},
+				},
+			});
+
+			revalidatePath('/dashboard');
+			revalidatePath('/dashboard/subscriptions');
+			revalidatePath('/admin/scanner');
+			revalidatePath('/admin/members');
+
+			return {
+				success: true,
+				message: `${membership.user.name} has been checked out successfully.`,
+				data: {
+					membership: membership as MembershipWithRelations,
+					action: 'checked_out',
+					attendance: {
+						totalVisits,
+						thisMonthVisits,
+						daysAllowed: membership.daysAllowed,
+						daysRemaining,
+					},
+				},
+			};
+		}
+
+		// Not checked in, perform check-in
+		// For fixed-day subscriptions, check if days remaining
+		if (
+			membership.daysAllowed !== null &&
+			daysRemaining !== null &&
+			daysRemaining <= 0
+		) {
+			return {
+				success: false,
+				message: `Member has used all ${membership.daysAllowed} days for this billing period.`,
+			};
+		}
+
+		const checkIn = await prisma.membershipCheckIn.create({
+			data: {
+				membershipId: membership.id,
+				checkInTime: new Date(),
+			},
+		});
+
+		await prisma.activityLog.create({
+			data: {
+				userId: membership.userId,
+				action: 'membership.admin_checkin',
+				entityType: 'MembershipCheckIn',
+				entityId: checkIn.id,
+				metadata: { membershipId: membership.id, adminAction: true },
+			},
+		});
+
+		revalidatePath('/dashboard');
+		revalidatePath('/dashboard/subscriptions');
+		revalidatePath('/admin/scanner');
+		revalidatePath('/admin/members');
+
+		return {
+			success: true,
+			message: `${membership.user.name} has been checked in successfully.`,
+			data: {
+				membership: membership as MembershipWithRelations,
+				checkInId: checkIn.id,
+				action: 'checked_in',
+				attendance: {
+					totalVisits: totalVisits + 1,
+					thisMonthVisits: thisMonthVisits + 1,
+					daysAllowed: membership.daysAllowed,
+					daysRemaining:
+						daysRemaining !== null ? daysRemaining - 1 : null,
+				},
+			},
+		};
+	} catch (error) {
+		console.error('Admin check-in error:', error);
+		return {
+			success: false,
+			message: 'Failed to process check-in. Please try again.',
+		};
+	}
+}
+
+/**
+ * Get membership details by code for admin view
+ */
+export async function getMembershipByCode(code: string): Promise<{
+	success: boolean;
+	message: string;
+	data?: {
+		membership: MembershipWithRelations;
+		isCheckedIn: boolean;
+		attendance: {
+			totalVisits: number;
+			thisMonthVisits: number;
+			daysAllowed: number | null;
+			daysRemaining: number | null;
+			recentCheckIns: Array<{
+				id: string;
+				checkInTime: Date;
+				checkOutTime: Date | null;
+			}>;
+		};
+	};
+}> {
+	try {
+		const membership = await prisma.membership.findFirst({
+			where: {
+				OR: [
+					{ membershipNumber: code.toUpperCase() },
+					{ accessCode: code.toUpperCase() },
+				],
+			},
+			include: {
+				user: {
+					select: { id: true, name: true, email: true, phone: true },
+				},
+				space: {
+					select: { id: true, name: true, slug: true, images: true },
+				},
+				pricingPlan: {
+					select: { id: true, name: true, price: true, unit: true },
+				},
+				checkIns: {
+					orderBy: { checkInTime: 'desc' },
+					take: 10, // Last 10 check-ins
+				},
+			},
+		});
+
+		if (!membership) {
+			return {
+				success: false,
+				message: 'Membership not found',
+			};
+		}
+
+		const now = new Date();
+		const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+		const thisMonthVisits = await prisma.membershipCheckIn.count({
+			where: {
+				membershipId: membership.id,
+				checkInTime: { gte: startOfMonth },
+			},
+		});
+
+		const totalVisits = await prisma.membershipCheckIn.count({
+			where: { membershipId: membership.id },
+		});
+
+		let daysRemaining: number | null = null;
+		if (membership.daysAllowed !== null) {
+			const usedDays = await prisma.membershipCheckIn.count({
+				where: {
+					membershipId: membership.id,
+					checkInTime: { gte: membership.startDate },
+				},
+			});
+			daysRemaining = Math.max(0, membership.daysAllowed - usedDays);
+		}
+
+		const isCheckedIn = membership.checkIns.some((ci) => !ci.checkOutTime);
+
+		return {
+			success: true,
+			message: 'Membership found',
+			data: {
+				membership: membership as MembershipWithRelations,
+				isCheckedIn,
+				attendance: {
+					totalVisits,
+					thisMonthVisits,
+					daysAllowed: membership.daysAllowed,
+					daysRemaining,
+					recentCheckIns: membership.checkIns.map((ci) => ({
+						id: ci.id,
+						checkInTime: ci.checkInTime,
+						checkOutTime: ci.checkOutTime,
+					})),
+				},
+			},
+		};
+	} catch (error) {
+		console.error('Get membership by code error:', error);
+		return {
+			success: false,
+			message: 'Failed to fetch membership',
+		};
+	}
+}
