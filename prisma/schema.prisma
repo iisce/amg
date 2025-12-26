@@ -37,6 +37,7 @@ model User {
   activityLogs       ActivityLog[]
   enquiries          Enquiry[]
   teamMemberships    MembershipMember[] // Team memberships where user is a member
+  visitors           Visitor[]          @relation("VisitorHost") // Visitors this user is hosting
 
   @@index([email])
   @@index([role])
@@ -494,6 +495,7 @@ model Membership {
   perkUsages     PerkUsage[] // Track usage of plan perks
   addonPurchases AddonPurchase[] // Purchased add-ons
   teamMembers    MembershipMember[] // Team members for this subscription
+  visitors       Visitor[] // Visitors to this membership
 
   @@index([userId])
   @@index([spaceId])
@@ -520,6 +522,12 @@ model MembershipMember {
   isActive     Boolean @default(true)
   isPrimary    Boolean @default(false) // True for the subscription owner
 
+  // Invitation system
+  invitationToken   String?   @unique // Token sent via email to invite user to create account
+  invitationSentAt  DateTime? // When invitation was sent
+  invitationExpires DateTime? // When invitation expires
+  qrCodeSentAt      DateTime? // When QR code was last emailed
+
   // Timestamps
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -534,6 +542,7 @@ model MembershipMember {
   @@index([userId])
   @@index([accessCode])
   @@index([isActive])
+  @@index([invitationToken])
 }
 
 // Track attendance/check-ins for memberships
@@ -571,6 +580,64 @@ enum MembershipStatus {
   EXPIRED
   CANCELLED
   SUSPENDED
+}
+
+// ============================================
+// VISITORS
+// ============================================
+
+// Visitors are temporary guests who visit members/subscribers
+model Visitor {
+  id        String  @id @default(cuid())
+
+  // Visitor info
+  name      String
+  email     String?
+  phone     String?
+  company   String? // Visitor's company
+  purpose   String? // Purpose of visit
+
+  // Who they're visiting
+  hostId    String  // User being visited (member/subscriber)
+  hostMembershipId String? // Optional: specific membership subscription
+
+  // Access control
+  accessCode    String   @unique // QR code for visitor check-in
+  validFrom     DateTime @default(now())
+  validUntil    DateTime // When visitor access expires
+  maxDuration   Int      @default(480) // Max visit duration in minutes (default 8 hours)
+
+  // Check-in status
+  checkInTime   DateTime?
+  checkOutTime  DateTime?
+  checkedInBy   String? // Admin/staff who processed check-in
+
+  // Status
+  status    VisitorStatus @default(PENDING)
+  notes     String?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  host       User        @relation("VisitorHost", fields: [hostId], references: [id])
+  membership Membership? @relation(fields: [hostMembershipId], references: [id])
+
+  @@index([hostId])
+  @@index([hostMembershipId])
+  @@index([accessCode])
+  @@index([status])
+  @@index([validFrom, validUntil])
+  @@index([checkInTime])
+}
+
+enum VisitorStatus {
+  PENDING    // Visitor registered but not yet arrived
+  CHECKED_IN // Visitor is currently in the workspace
+  CHECKED_OUT // Visitor has left
+  EXPIRED    // Visit time expired without check-in
+  CANCELLED  // Visit was cancelled
 }
 
 // ============================================
@@ -648,4 +715,61 @@ model ActivityLog {
   @@index([action])
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+// ============================================
+// TOUR BOOKING (Workspace Inspection)
+// ============================================
+
+model Tour {
+  id        String @id @default(cuid())
+
+  // Contact info
+  name      String
+  email     String
+  phone     String?
+  company   String?
+
+  // Scheduling
+  preferredDate DateTime  // Requested date/time
+  confirmedDate DateTime? // Actual confirmed slot
+  duration      Int       @default(30) // Duration in minutes
+
+  // Interest details
+  interestedIn String? // "Private Office", "Shared Desk", "Meeting Room", etc.
+  groupSize    Int     @default(1) // Number of people touring
+  budget       String? // Budget range
+  source       String? // How they heard about AMG: "Google", "Instagram", "Referral", etc.
+  message      String? // Additional message/questions
+
+  // Status tracking
+  status      TourStatus @default(PENDING)
+  confirmedBy String?    // Admin who confirmed the tour
+  conductedBy String?    // Staff who gave the tour
+  feedback    String?    // Post-tour notes from staff
+
+  // Conversion tracking
+  converted            Boolean @default(false)
+  convertedToMembershipId String? // If they signed up, link to their membership
+
+  // Reminder tracking
+  reminderSent Boolean @default(false)
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([status])
+  @@index([preferredDate])
+  @@index([confirmedDate])
+  @@index([createdAt])
+}
+
+enum TourStatus {
+  PENDING   // Awaiting admin confirmation
+  CONFIRMED // Appointment confirmed
+  COMPLETED // Tour conducted
+  CANCELLED // Cancelled by prospect or admin
+  NO_SHOW   // Prospect didn't show up
 }

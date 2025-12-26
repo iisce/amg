@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { CancelSubscriptionForm } from './cancel-subscription-form';
 import { SubscriptionQRCode } from './subscription-qr-code';
+import { TeamManagement } from '@/components/team/team-management';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -502,6 +503,18 @@ export default async function SubscriptionDetailPage({ params }: PageProps) {
 								membershipNumber={subscription.membershipNumber}
 								accessCode={subscription.accessCode}
 								spaceName={subscription.space.name}
+							/>
+						)}
+
+					{/* Team Management - Show for subscriptions with multiple members */}
+					{subscription.status === 'ACTIVE' &&
+						subscription.maxMembers > 1 && (
+							<TeamManagement
+								membershipId={subscription.id}
+								membershipNumber={subscription.membershipNumber}
+								companyName={subscription.companyName}
+								maxMembers={subscription.maxMembers}
+								isAdmin={false}
 							/>
 						)}
 

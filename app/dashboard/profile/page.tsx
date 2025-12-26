@@ -3,13 +3,11 @@ import { getCurrentUser, getUserSubscriptions } from '@/actions';
 import { ProfileClient } from './profile-client';
 
 export default async function ProfilePage() {
-	const userResult = await getCurrentUser();
+	const user = await getCurrentUser();
 
-	if (!userResult.success || !userResult.data) {
+	if (!user) {
 		redirect('/login');
 	}
-
-	const user = userResult.data;
 
 	// Fetch user's subscriptions
 	const subscriptionsResult = await getUserSubscriptions();

@@ -22,6 +22,10 @@ import type {
 	AddonPurchase,
 	PerkPeriod,
 	AddonPurchaseStatus,
+	MembershipCheckIn,
+	MembershipMember,
+	Tour,
+	TourStatus,
 } from '@prisma/client';
 
 // Re-export Prisma types for convenience
@@ -49,6 +53,10 @@ export type {
 	AddonPurchase,
 	PerkPeriod,
 	AddonPurchaseStatus,
+	MembershipCheckIn,
+	MembershipMember,
+	Tour,
+	TourStatus,
 };
 
 // API Response types
@@ -78,6 +86,11 @@ export interface MembershipWithRelations extends Membership {
 	payments?: Payment[];
 	perkUsages?: PerkUsage[];
 	addonPurchases?: AddonPurchaseWithAddon[];
+	checkIns?: MembershipCheckIn[];
+	teamMembers?: { id: string }[];
+	_count?: {
+		teamMembers?: number;
+	};
 }
 
 export interface PaymentWithRelations extends Payment {

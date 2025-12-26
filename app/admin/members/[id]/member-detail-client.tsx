@@ -129,6 +129,12 @@ interface Membership {
 	autoRenew: boolean;
 	createdAt: Date;
 	checkIns: CheckIn[];
+	maxMembers: number;
+	currentOccupancy: number;
+	companyName: string | null;
+	_count?: {
+		teamMembers: number;
+	};
 	space: {
 		name: string;
 	};
@@ -896,7 +902,96 @@ export default function MemberDetailClient({
 														)}
 													</p>
 												</div>
+												{membership.maxMembers > 1 && (
+													<div>
+														<p className='text-muted-foreground'>
+															Team Members
+														</p>
+														<p className='font-medium flex items-center gap-1'>
+															<Users className='h-4 w-4' />
+															{membership._count
+																?.teamMembers ||
+																0}{' '}
+															/{' '}
+															{
+																membership.maxMembers
+															}
+															{membership.currentOccupancy >
+																0 && (
+																<Badge
+																	variant='secondary'
+																	className='ml-2 text-xs'
+																>
+																	{
+																		membership.currentOccupancy
+																	}{' '}
+																	present
+																</Badge>
+															)}
+														</p>
+													</div>
+												)}
 											</div>
+											{membership.maxMembers > 1 && (
+												<>
+													<Separator />
+													<div className='flex items-center justify-between pt-2'>
+														<div className='text-sm'>
+															{membership.companyName && (
+																<span className='text-muted-foreground'>
+																	Company:{' '}
+																	<span className='font-medium text-foreground'>
+																		{
+																			membership.companyName
+																		}
+																	</span>
+																</span>
+															)}
+														</div>
+														<Button
+															variant='outline'
+															size='sm'
+															onClick={() =>
+																router.push(
+																	`/admin/members/${user.id}/team/${membership.id}`
+																)
+															}
+														>
+															<Users className='h-4 w-4 mr-2' />
+															Manage Team
+														</Button>
+													</div>
+												</>
+											)}
+											{membership.maxMembers === 1 &&
+												membership.status ===
+													'ACTIVE' && (
+													<>
+														<Separator />
+														<div className='flex items-center justify-between pt-2'>
+															<p className='text-sm text-muted-foreground'>
+																Enable team
+																membership to
+																allow multiple
+																people to use
+																this
+																subscription
+															</p>
+															<Button
+																variant='outline'
+																size='sm'
+																onClick={() =>
+																	router.push(
+																		`/admin/members/${user.id}/team/${membership.id}`
+																	)
+																}
+															>
+																<Users className='h-4 w-4 mr-2' />
+																Enable Team
+															</Button>
+														</div>
+													</>
+												)}
 										</div>
 									))}
 								</div>

@@ -74,7 +74,7 @@ export default async function AdminMemberDetailPage({ params }: PageProps) {
 				take: 50,
 			}),
 
-			// All memberships with check-ins
+			// All memberships with check-ins and team data
 			prisma.membership.findMany({
 				where: { userId: id },
 				select: {
@@ -90,6 +90,9 @@ export default async function AdminMemberDetailPage({ params }: PageProps) {
 					daysAllowed: true,
 					autoRenew: true,
 					createdAt: true,
+					maxMembers: true,
+					currentOccupancy: true,
+					companyName: true,
 					space: {
 						select: {
 							name: true,
@@ -109,6 +112,11 @@ export default async function AdminMemberDetailPage({ params }: PageProps) {
 						},
 						orderBy: {
 							checkInTime: 'desc',
+						},
+					},
+					_count: {
+						select: {
+							teamMembers: true,
 						},
 					},
 				},

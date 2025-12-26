@@ -717,3 +717,543 @@ export function createRefundConfirmationEmail(
 		html: createEmailTemplate(content),
 	};
 }
+
+// ============================================
+// TEAM MEMBER EMAILS
+// ============================================
+
+export function createTeamMemberInvitationEmail(data: {
+	memberName: string;
+	memberEmail: string;
+	ownerName: string;
+	spaceName: string;
+	companyName?: string;
+	invitationToken: string;
+	accessCode: string;
+}): {
+	subject: string;
+	html: string;
+} {
+	const acceptLink = `${process.env.NEXT_PUBLIC_APP_URL}/team/invite/${data.invitationToken}`;
+	const teamName = data.companyName || data.spaceName;
+
+	const content = `
+		<h2>You're Invited to Join a Team! 🎉</h2>
+		<p>Hi ${data.memberName},</p>
+		<p><strong>${data.ownerName}</strong> has invited you to join their workspace team at AMG Workspace.</p>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>Team:</strong> ${teamName}</p>
+			<p style="margin: 10px 0 0 0;"><strong>Workspace:</strong> ${data.spaceName}</p>
+		</div>
+
+		<p>By joining this team, you'll get:</p>
+		<ul>
+			<li>Your own personal QR code for check-in</li>
+			<li>Access to track your attendance history</li>
+			<li>Notifications about your workspace activity</li>
+		</ul>
+
+		<a href="${acceptLink}" class="button">Accept Invitation</a>
+
+		<p>Or copy and paste this link:</p>
+		<p style="word-break: break-all; color: #FDB913;">${acceptLink}</p>
+
+		<div class="divider"></div>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>Your Access Code:</strong></p>
+			<p style="margin: 10px 0 0 0; font-size: 24px; font-family: monospace; letter-spacing: 2px;"><strong>${data.accessCode}</strong></p>
+			<p style="margin: 10px 0 0 0; font-size: 14px;">You can use this code even before accepting the invitation.</p>
+		</div>
+
+		<p style="margin-top: 30px;"><strong>Note:</strong> This invitation expires in 7 days.</p>
+
+		<p>Best regards,<br>The AMG Workspace Team</p>
+	`;
+
+	return {
+		subject: `${data.ownerName} invited you to join ${teamName} - AMG Workspace`,
+		html: createEmailTemplate(content),
+	};
+}
+
+export function createTeamMemberQRCodeEmail(data: {
+	memberName: string;
+	memberEmail: string;
+	spaceName: string;
+	companyName?: string;
+	accessCode: string;
+	qrCodeDataUrl: string;
+}): {
+	subject: string;
+	html: string;
+} {
+	const teamName = data.companyName || data.spaceName;
+	const portalLink = `${process.env.NEXT_PUBLIC_APP_URL}/team/portal/${data.accessCode}`;
+
+	const content = `
+		<h2>Your Workspace QR Code 📱</h2>
+		<p>Hi ${data.memberName},</p>
+		<p>Here's your personal QR code for checking in at <strong>${teamName}</strong>.</p>
+
+		<div style="text-align: center; margin: 30px 0; padding: 20px; background: #f9f9f9; border-radius: 12px;">
+			<img src="${data.qrCodeDataUrl}" alt="Your QR Code" style="max-width: 250px; border: 3px solid #FDB913; border-radius: 12px; padding: 10px; background: white;" />
+			<p style="margin-top: 15px; font-size: 18px; font-family: monospace; letter-spacing: 2px;"><strong>${data.accessCode}</strong></p>
+		</div>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>How to use:</strong></p>
+			<ul style="margin: 10px 0 0 0; padding-left: 20px;">
+				<li>Show this QR code at reception when you arrive</li>
+				<li>The staff will scan it to check you in</li>
+				<li>Scan again when leaving to check out</li>
+			</ul>
+		</div>
+
+		<p style="margin-top: 20px;">You can also access your check-in history and QR code anytime:</p>
+		<a href="${portalLink}" class="button">View Portal</a>
+
+		<div class="divider"></div>
+
+		<p><strong>💡 Pro tip:</strong> Save this QR code to your phone's photos or add it to your digital wallet for quick access!</p>
+
+		<p>Best regards,<br>The AMG Workspace Team</p>
+	`;
+
+	return {
+		subject: `Your QR Code for ${teamName} - AMG Workspace`,
+		html: createEmailTemplate(content),
+	};
+}
+
+// ============================================
+// VISITOR EMAILS
+// ============================================
+
+export function createVisitorInviteEmail(data: {
+	visitorName: string;
+	visitorEmail: string;
+	hostName: string;
+	accessCode: string;
+	validFrom: Date;
+	validUntil: Date;
+	purpose: string;
+	company?: string;
+}): {
+	subject: string;
+	html: string;
+} {
+	const validFromStr = format(new Date(data.validFrom), 'EEEE, MMMM d, yyyy');
+	const validUntilStr = format(
+		new Date(data.validUntil),
+		'EEEE, MMMM d, yyyy'
+	);
+	const timeStr = format(new Date(data.validFrom), 'h:mm a');
+
+	const content = `
+		<h2>You're Invited to Visit AMG Workspace! 👋</h2>
+		<p>Hi ${data.visitorName},</p>
+		<p><strong>${
+			data.hostName
+		}</strong> has registered you as a visitor at AMG Workspace.</p>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>Your Visitor Pass</strong></p>
+			<p style="margin: 15px 0 0 0; font-size: 28px; font-family: monospace; letter-spacing: 3px; text-align: center;"><strong>${
+				data.accessCode
+			}</strong></p>
+		</div>
+
+		<h3 style="margin-top: 30px;">Visit Details</h3>
+		<div class="detail-row">
+			<span class="detail-label">Purpose:</span>
+			<span class="detail-value">${data.purpose}</span>
+		</div>
+		<div class="detail-row">
+			<span class="detail-label">Host:</span>
+			<span class="detail-value">${data.hostName}</span>
+		</div>
+		${
+			data.company
+				? `
+		<div class="detail-row">
+			<span class="detail-label">Company:</span>
+			<span class="detail-value">${data.company}</span>
+		</div>
+		`
+				: ''
+		}
+		<div class="detail-row">
+			<span class="detail-label">Valid From:</span>
+			<span class="detail-value">${validFromStr} at ${timeStr}</span>
+		</div>
+		<div class="detail-row">
+			<span class="detail-label">Valid Until:</span>
+			<span class="detail-value">${validUntilStr}</span>
+		</div>
+
+		<div class="divider"></div>
+
+		<h3>What to Do on Arrival</h3>
+		<ol style="line-height: 2;">
+			<li>Go to the reception desk at AMG Workspace</li>
+			<li>Provide your access code: <strong>${data.accessCode}</strong></li>
+			<li>A staff member will check you in</li>
+			<li>Your host will be notified of your arrival</li>
+		</ol>
+
+		<div class="info-box" style="margin-top: 20px;">
+			<p style="margin: 0;"><strong>📍 Location:</strong></p>
+			<p style="margin: 10px 0 0 0;">AMG Workspace, Lagos, Nigeria</p>
+		</div>
+
+		<p style="margin-top: 30px;">We look forward to seeing you!</p>
+		<p>Best regards,<br>The AMG Workspace Team</p>
+	`;
+
+	return {
+		subject: `Visitor Pass from ${data.hostName} - AMG Workspace`,
+		html: createEmailTemplate(content),
+	};
+}
+
+export function createVisitorQRCodeEmail(data: {
+	visitorName: string;
+	visitorEmail: string;
+	hostName: string;
+	accessCode: string;
+	validFrom: Date;
+	validUntil: Date;
+	qrCodeDataUrl: string;
+}): {
+	subject: string;
+	html: string;
+} {
+	const validFromStr = format(new Date(data.validFrom), 'EEEE, MMMM d, yyyy');
+	const validUntilStr = format(
+		new Date(data.validUntil),
+		'EEEE, MMMM d, yyyy'
+	);
+
+	const content = `
+		<h2>Your Visitor QR Code 📱</h2>
+		<p>Hi ${data.visitorName},</p>
+		<p>Here's your QR code for your visit to AMG Workspace.</p>
+
+		<div style="text-align: center; margin: 30px 0; padding: 20px; background: #f9f9f9; border-radius: 12px;">
+			<img src="${data.qrCodeDataUrl}" alt="Visitor QR Code" style="max-width: 250px; border: 3px solid #FDB913; border-radius: 12px; padding: 10px; background: white;" />
+			<p style="margin-top: 15px; font-size: 18px; font-family: monospace; letter-spacing: 2px;"><strong>${data.accessCode}</strong></p>
+		</div>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>Pass Valid:</strong></p>
+			<p style="margin: 10px 0 0 0;">${validFromStr} - ${validUntilStr}</p>
+			<p style="margin: 10px 0 0 0;"><strong>Host:</strong> ${data.hostName}</p>
+		</div>
+
+		<p style="margin-top: 20px;">Show this QR code at reception when you arrive. Save it to your phone for easy access!</p>
+
+		<p>Best regards,<br>The AMG Workspace Team</p>
+	`;
+
+	return {
+		subject: `Your Visitor QR Code - AMG Workspace`,
+		html: createEmailTemplate(content),
+	};
+}
+
+export function createVisitorCheckInNotificationEmail(data: {
+	hostName: string;
+	visitorName: string;
+	visitorCompany?: string;
+	purpose: string;
+	checkInTime: Date;
+}): {
+	subject: string;
+	html: string;
+} {
+	const checkInTimeStr = format(new Date(data.checkInTime), 'h:mm a');
+	const checkInDateStr = format(
+		new Date(data.checkInTime),
+		'EEEE, MMMM d, yyyy'
+	);
+
+	const content = `
+		<h2>Your Visitor Has Arrived! 👋</h2>
+		<p>Hi ${data.hostName},</p>
+		<p>Your visitor has checked in at AMG Workspace reception.</p>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>Visitor:</strong> ${data.visitorName}</p>
+			${
+				data.visitorCompany
+					? `<p style="margin: 5px 0 0 0;"><strong>Company:</strong> ${data.visitorCompany}</p>`
+					: ''
+			}
+			<p style="margin: 5px 0 0 0;"><strong>Purpose:</strong> ${data.purpose}</p>
+			<p style="margin: 10px 0 0 0;"><strong>Checked in at:</strong> ${checkInTimeStr} on ${checkInDateStr}</p>
+		</div>
+
+		<p>Please proceed to meet your visitor at the reception area.</p>
+
+		<a href="${
+			process.env.NEXT_PUBLIC_APP_URL
+		}/dashboard/visitors" class="button">View Visitors</a>
+
+		<p>Best regards,<br>The AMG Workspace Team</p>
+	`;
+
+	return {
+		subject: `${data.visitorName} has arrived - AMG Workspace`,
+		html: createEmailTemplate(content),
+	};
+}
+
+// ============================================
+// TOUR BOOKING EMAILS
+// ============================================
+
+export function createTourRequestEmail(data: {
+	name: string;
+	email: string;
+	preferredDate: Date;
+	interestedIn?: string;
+}): {
+	subject: string;
+	html: string;
+} {
+	const preferredDateStr = format(
+		new Date(data.preferredDate),
+		'EEEE, MMMM d, yyyy'
+	);
+	const preferredTimeStr = format(new Date(data.preferredDate), 'h:mm a');
+
+	const content = `
+		<h2>Tour Request Received! 🏢</h2>
+		<p>Hi ${data.name},</p>
+		<p>Thank you for your interest in AMG Workspace! We've received your tour request.</p>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>Your Requested Time:</strong></p>
+			<p style="margin: 10px 0 0 0; font-size: 18px;">${preferredDateStr} at ${preferredTimeStr}</p>
+			${
+				data.interestedIn
+					? `<p style="margin: 10px 0 0 0;"><strong>Interested in:</strong> ${data.interestedIn}</p>`
+					: ''
+			}
+		</div>
+
+		<h3 style="margin-top: 30px;">What Happens Next?</h3>
+		<ol style="line-height: 2;">
+			<li>Our team will review your request</li>
+			<li>We'll confirm your appointment or suggest an alternative time</li>
+			<li>You'll receive a confirmation email with all the details</li>
+		</ol>
+
+		<p>We typically respond within 24 hours during business days.</p>
+
+		<div class="info-box" style="margin-top: 20px;">
+			<p style="margin: 0;"><strong>📍 Location:</strong></p>
+			<p style="margin: 10px 0 0 0;">AMG Workspace, Lagos, Nigeria</p>
+		</div>
+
+		<p style="margin-top: 30px;">Questions? Reply to this email or call us.</p>
+		<p>Best regards,<br>The AMG Workspace Team</p>
+	`;
+
+	return {
+		subject: 'Tour Request Received - AMG Workspace',
+		html: createEmailTemplate(content),
+	};
+}
+
+export function createTourConfirmationEmail(data: {
+	name: string;
+	email: string;
+	confirmedDate: Date;
+	duration: number;
+	isRescheduled?: boolean;
+}): {
+	subject: string;
+	html: string;
+} {
+	const confirmedDateStr = format(
+		new Date(data.confirmedDate),
+		'EEEE, MMMM d, yyyy'
+	);
+	const confirmedTimeStr = format(new Date(data.confirmedDate), 'h:mm a');
+
+	const content = `
+		<h2>${data.isRescheduled ? 'Tour Rescheduled!' : 'Tour Confirmed!'} ✅</h2>
+		<p>Hi ${data.name},</p>
+		<p>${
+			data.isRescheduled
+				? 'Your workspace tour has been rescheduled.'
+				: 'Great news! Your workspace tour has been confirmed.'
+		}</p>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>📅 Your Appointment:</strong></p>
+			<p style="margin: 15px 0 0 0; font-size: 22px; font-weight: bold;">${confirmedDateStr}</p>
+			<p style="margin: 5px 0 0 0; font-size: 18px;">at ${confirmedTimeStr}</p>
+			<p style="margin: 10px 0 0 0;"><strong>Duration:</strong> ~${
+				data.duration
+			} minutes</p>
+		</div>
+
+		<h3 style="margin-top: 30px;">What to Expect</h3>
+		<ul style="line-height: 2;">
+			<li>A guided tour of our workspace facilities</li>
+			<li>Overview of membership plans and pricing</li>
+			<li>Q&A session with our team</li>
+			<li>No obligation - just explore what we offer!</li>
+		</ul>
+
+		<div class="info-box" style="margin-top: 20px;">
+			<p style="margin: 0;"><strong>📍 Location:</strong></p>
+			<p style="margin: 10px 0 0 0;">AMG Workspace, Lagos, Nigeria</p>
+		</div>
+
+		<h3 style="margin-top: 30px;">Need to Reschedule?</h3>
+		<p>No problem! Just reply to this email or contact us at least 24 hours before your appointment.</p>
+
+		<p style="margin-top: 30px;">We look forward to showing you around!</p>
+		<p>Best regards,<br>The AMG Workspace Team</p>
+	`;
+
+	return {
+		subject: `${
+			data.isRescheduled ? 'Tour Rescheduled' : 'Tour Confirmed'
+		} - ${confirmedDateStr} - AMG Workspace`,
+		html: createEmailTemplate(content),
+	};
+}
+
+export function createTourReminderEmail(data: {
+	name: string;
+	tourDate: Date;
+	duration: number;
+}): {
+	subject: string;
+	html: string;
+} {
+	const tourDateStr = format(new Date(data.tourDate), 'EEEE, MMMM d, yyyy');
+	const tourTimeStr = format(new Date(data.tourDate), 'h:mm a');
+
+	const content = `
+		<h2>Reminder: Your Tour is Tomorrow! 🔔</h2>
+		<p>Hi ${data.name},</p>
+		<p>This is a friendly reminder about your upcoming workspace tour at AMG Workspace.</p>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>📅 Tomorrow:</strong></p>
+			<p style="margin: 15px 0 0 0; font-size: 22px; font-weight: bold;">${tourDateStr}</p>
+			<p style="margin: 5px 0 0 0; font-size: 18px;">at ${tourTimeStr}</p>
+			<p style="margin: 10px 0 0 0;"><strong>Duration:</strong> ~${data.duration} minutes</p>
+		</div>
+
+		<div class="info-box" style="margin-top: 20px;">
+			<p style="margin: 0;"><strong>📍 Location:</strong></p>
+			<p style="margin: 10px 0 0 0;">AMG Workspace, Lagos, Nigeria</p>
+		</div>
+
+		<p style="margin-top: 20px;"><strong>Can't make it?</strong> Please let us know as soon as possible so we can reschedule.</p>
+
+		<p style="margin-top: 30px;">See you tomorrow!</p>
+		<p>Best regards,<br>The AMG Workspace Team</p>
+	`;
+
+	return {
+		subject: `Reminder: Your Tour Tomorrow at ${tourTimeStr} - AMG Workspace`,
+		html: createEmailTemplate(content),
+	};
+}
+
+export function createTourAdminNotificationEmail(data: {
+	name: string;
+	email: string;
+	phone?: string;
+	company?: string;
+	preferredDate: Date;
+	interestedIn?: string;
+	groupSize: number;
+	budget?: string;
+	source?: string;
+	message?: string;
+}): {
+	subject: string;
+	html: string;
+} {
+	const preferredDateStr = format(
+		new Date(data.preferredDate),
+		'EEEE, MMMM d, yyyy'
+	);
+	const preferredTimeStr = format(new Date(data.preferredDate), 'h:mm a');
+
+	const content = `
+		<h2>New Tour Request! 🔔</h2>
+		<p>A new tour has been requested on the website.</p>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>Contact Information:</strong></p>
+			<p style="margin: 10px 0 0 0;"><strong>Name:</strong> ${data.name}</p>
+			<p style="margin: 5px 0 0 0;"><strong>Email:</strong> ${data.email}</p>
+			${
+				data.phone
+					? `<p style="margin: 5px 0 0 0;"><strong>Phone:</strong> ${data.phone}</p>`
+					: ''
+			}
+			${
+				data.company
+					? `<p style="margin: 5px 0 0 0;"><strong>Company:</strong> ${data.company}</p>`
+					: ''
+			}
+		</div>
+
+		<div class="info-box" style="margin-top: 20px;">
+			<p style="margin: 0;"><strong>Tour Details:</strong></p>
+			<p style="margin: 10px 0 0 0;"><strong>Requested Date:</strong> ${preferredDateStr} at ${preferredTimeStr}</p>
+			${
+				data.interestedIn
+					? `<p style="margin: 5px 0 0 0;"><strong>Interested in:</strong> ${data.interestedIn}</p>`
+					: ''
+			}
+			<p style="margin: 5px 0 0 0;"><strong>Group Size:</strong> ${data.groupSize} ${
+		data.groupSize > 1 ? 'people' : 'person'
+	}</p>
+			${
+				data.budget
+					? `<p style="margin: 5px 0 0 0;"><strong>Budget:</strong> ${data.budget}</p>`
+					: ''
+			}
+			${
+				data.source
+					? `<p style="margin: 5px 0 0 0;"><strong>Source:</strong> ${data.source}</p>`
+					: ''
+			}
+		</div>
+
+		${
+			data.message
+				? `
+		<div class="info-box" style="margin-top: 20px;">
+			<p style="margin: 0;"><strong>Message:</strong></p>
+			<p style="margin: 10px 0 0 0;">${data.message}</p>
+		</div>
+		`
+				: ''
+		}
+
+		<a href="${
+			process.env.NEXT_PUBLIC_APP_URL
+		}/admin/tours" class="button">Review & Confirm Tour</a>
+
+		<p style="margin-top: 30px; color: #888;">This is an automated notification from AMG Workspace.</p>
+	`;
+
+	return {
+		subject: `🆕 Tour Request: ${data.name} - ${preferredDateStr}`,
+		html: createEmailTemplate(content),
+	};
+}

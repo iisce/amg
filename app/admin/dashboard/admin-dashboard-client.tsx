@@ -20,6 +20,7 @@ import {
 	FileText,
 	UserCog,
 	Loader2,
+	UserPlus,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -199,6 +200,13 @@ export default function AdminDashboardClient({
 						>
 							<QrCode className='h-4 w-4' />
 							Scanner
+						</Link>
+						<Link
+							href='/admin/visitors'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
+						>
+							<UserPlus className='h-4 w-4' />
+							Visitors
 						</Link>
 						<Link
 							href='/admin/reports'

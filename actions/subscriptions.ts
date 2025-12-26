@@ -10,7 +10,7 @@ import type {
 } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { randomBytes } from 'crypto';
-import { getCurrentUser } from './auth';
+import { getCurrentAdmin, getCurrentUser } from './auth';
 import { sendEmail } from '@/lib/email';
 import {
 	createSubscriptionRenewalEmail,
@@ -190,6 +190,13 @@ export async function getSubscriptionById(
 				},
 				checkIns: {
 					orderBy: { checkInTime: 'desc' },
+				},
+				teamMembers: {
+					where: { isActive: true },
+					select: { id: true },
+				},
+				_count: {
+					select: { teamMembers: true },
 				},
 			},
 		});
@@ -533,6 +540,124 @@ export async function activateSubscription(
 	id: string
 ): Promise<SubscriptionResult> {
 	return updateSubscriptionStatus(id, 'ACTIVE');
+}
+
+/**
+ * Update team settings for a subscription (admin only)
+ * When enabling team membership (maxMembers > 1), auto-creates the primary member
+ */
+export async function updateTeamSettings(
+	id: string,
+	data: { maxMembers?: number; companyName?: string | null }
+): Promise<SubscriptionResult> {
+	try {
+		// First, get current membership state
+		const currentMembership = await prisma.membership.findUnique({
+			where: { id },
+			include: {
+				user: {
+					select: { id: true, name: true, email: true, phone: true },
+				},
+				_count: {
+					select: { teamMembers: true },
+				},
+			},
+		});
+
+		if (!currentMembership) {
+			return {
+				success: false,
+				message: 'Subscription not found',
+			};
+		}
+
+		const membership = await prisma.membership.update({
+			where: { id },
+			data: {
+				...(data.maxMembers !== undefined && {
+					maxMembers: data.maxMembers,
+				}),
+				...(data.companyName !== undefined && {
+					companyName: data.companyName,
+				}),
+			},
+			include: {
+				user: {
+					select: { id: true, name: true, email: true, phone: true },
+				},
+				space: {
+					select: { id: true, name: true, slug: true, images: true },
+				},
+				pricingPlan: {
+					select: { id: true, name: true, price: true, unit: true },
+				},
+			},
+		});
+
+		// If enabling team membership and no primary member exists, create one
+		if (
+			data.maxMembers &&
+			data.maxMembers > 1 &&
+			currentMembership._count.teamMembers === 0
+		) {
+			// Generate unique access code for the primary member
+			let accessCode = `AMG-TM-${randomBytes(4)
+				.toString('hex')
+				.toUpperCase()}`;
+			let attempts = 0;
+			while (attempts < 5) {
+				const existing = await prisma.membershipMember.findUnique({
+					where: { accessCode },
+				});
+				if (!existing) break;
+				accessCode = `AMG-TM-${randomBytes(4)
+					.toString('hex')
+					.toUpperCase()}`;
+				attempts++;
+			}
+
+			// Create the primary member (subscription owner)
+			await prisma.membershipMember.create({
+				data: {
+					membershipId: id,
+					userId: currentMembership.userId,
+					name: currentMembership.user.name || 'Subscription Owner',
+					email: currentMembership.user.email,
+					phone: currentMembership.user.phone,
+					accessCode,
+					isPrimary: true,
+					isActive: true,
+				},
+			});
+		}
+
+		await prisma.activityLog.create({
+			data: {
+				action: 'subscription.team_settings_updated',
+				entityType: 'Membership',
+				entityId: id,
+				metadata: data,
+			},
+		});
+
+		revalidatePath('/dashboard');
+		revalidatePath('/dashboard/subscriptions');
+		revalidatePath('/admin/members');
+		revalidatePath(`/admin/members/${membership.userId}`);
+
+		return {
+			success: true,
+			message: 'Team settings updated successfully',
+			data: membership as MembershipWithRelations,
+		};
+	} catch (error) {
+		console.error('Update team settings error:', error);
+		return {
+			success: false,
+			message: 'Failed to update team settings',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
 }
 
 export async function pauseSubscription(
@@ -1734,6 +1859,632 @@ async function handleTeamMemberCheckIn(
 			success: false,
 			message:
 				'Failed to process team member check-in. Please try again.',
+		};
+	}
+}
+
+// ============================================
+// TEAM MEMBER INVITATIONS
+// ============================================
+
+export interface TeamMemberInvitationResult {
+	success: boolean;
+	message: string;
+	data?: {
+		memberId: string;
+		email: string;
+		invitationToken?: string;
+	};
+	error?: string;
+}
+
+/**
+ * Send invitation email to a team member so they can create/link a user account
+ */
+export async function sendTeamMemberInvitation(
+	memberId: string
+): Promise<TeamMemberInvitationResult> {
+	try {
+		const admin = await getCurrentAdmin();
+		const user = !admin ? await getCurrentUser() : null;
+
+		if (!admin && !user) {
+			return {
+				success: false,
+				message: 'Authentication required',
+			};
+		}
+
+		const member = await prisma.membershipMember.findUnique({
+			where: { id: memberId },
+			include: {
+				membership: {
+					include: {
+						user: {
+							select: { id: true, name: true, email: true },
+						},
+						space: {
+							select: { id: true, name: true },
+						},
+					},
+				},
+			},
+		});
+
+		if (!member) {
+			return {
+				success: false,
+				message: 'Team member not found',
+			};
+		}
+
+		// Check permission - user must own the membership or be admin
+		if (user && member.membership.userId !== user.id) {
+			return {
+				success: false,
+				message:
+					'You do not have permission to invite this team member',
+			};
+		}
+
+		if (!member.email) {
+			return {
+				success: false,
+				message: 'Team member does not have an email address',
+			};
+		}
+
+		if (member.userId) {
+			return {
+				success: false,
+				message: 'This team member is already linked to a user account',
+			};
+		}
+
+		// Generate invitation token
+		const invitationToken = randomBytes(32).toString('hex');
+		const invitationExpires = new Date();
+		invitationExpires.setDate(invitationExpires.getDate() + 7); // 7 days expiry
+
+		// Update member with invitation token
+		await prisma.membershipMember.update({
+			where: { id: memberId },
+			data: {
+				invitationToken,
+				invitationSentAt: new Date(),
+				invitationExpires,
+			},
+		});
+
+		// Import and send invitation email
+		const { createTeamMemberInvitationEmail } = await import(
+			'@/lib/email-templates'
+		);
+
+		const inviteEmail = createTeamMemberInvitationEmail({
+			memberName: member.name,
+			memberEmail: member.email,
+			ownerName: member.membership.user.name,
+			spaceName: member.membership.space.name,
+			companyName: member.membership.companyName || undefined,
+			invitationToken,
+			accessCode: member.accessCode,
+		});
+
+		const sent = await sendEmail({
+			to: member.email,
+			subject: inviteEmail.subject,
+			html: inviteEmail.html,
+		});
+
+		if (!sent) {
+			return {
+				success: false,
+				message: 'Failed to send invitation email',
+			};
+		}
+
+		await prisma.activityLog.create({
+			data: {
+				userId: admin?.id || user?.id,
+				action: 'team_member.invitation_sent',
+				entityType: 'MembershipMember',
+				entityId: memberId,
+				metadata: {
+					memberName: member.name,
+					memberEmail: member.email,
+				},
+			},
+		});
+
+		revalidatePath('/dashboard/subscriptions');
+		revalidatePath('/admin/members');
+
+		return {
+			success: true,
+			message: `Invitation email sent to ${member.email}`,
+			data: {
+				memberId,
+				email: member.email,
+			},
+		};
+	} catch (error) {
+		console.error('Send team member invitation error:', error);
+		return {
+			success: false,
+			message: 'Failed to send invitation',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+/**
+ * Accept team member invitation and link to user account
+ */
+export async function acceptTeamMemberInvitation(
+	invitationToken: string,
+	userData?: { name?: string; password?: string }
+): Promise<TeamMemberInvitationResult> {
+	try {
+		const member = await prisma.membershipMember.findFirst({
+			where: { invitationToken },
+			include: {
+				membership: {
+					include: {
+						user: { select: { id: true, name: true } },
+						space: { select: { id: true, name: true } },
+					},
+				},
+			},
+		});
+
+		if (!member) {
+			return {
+				success: false,
+				message: 'Invalid or expired invitation token',
+			};
+		}
+
+		if (member.invitationExpires && member.invitationExpires < new Date()) {
+			return {
+				success: false,
+				message:
+					'This invitation has expired. Please request a new one.',
+			};
+		}
+
+		if (member.userId) {
+			return {
+				success: false,
+				message: 'This invitation has already been accepted',
+			};
+		}
+
+		const currentUser = await getCurrentUser();
+
+		// If user is logged in, link to their account
+		if (currentUser) {
+			// Check if email matches
+			if (member.email && currentUser.email !== member.email) {
+				return {
+					success: false,
+					message: `This invitation was sent to ${member.email}. Please log in with that email or contact the team owner.`,
+				};
+			}
+
+			await prisma.membershipMember.update({
+				where: { id: member.id },
+				data: {
+					userId: currentUser.id,
+					invitationToken: null,
+					invitationExpires: null,
+				},
+			});
+
+			await prisma.activityLog.create({
+				data: {
+					userId: currentUser.id,
+					action: 'team_member.invitation_accepted',
+					entityType: 'MembershipMember',
+					entityId: member.id,
+					metadata: {
+						membershipId: member.membershipId,
+						linkedToExistingUser: true,
+					},
+				},
+			});
+
+			revalidatePath('/dashboard');
+			revalidatePath('/dashboard/subscriptions');
+
+			return {
+				success: true,
+				message: `You've been added to ${
+					member.membership.companyName ||
+					member.membership.space.name
+				} team!`,
+				data: {
+					memberId: member.id,
+					email: member.email || currentUser.email,
+				},
+			};
+		}
+
+		// If no user logged in and they provided registration data
+		if (userData?.password && member.email) {
+			const bcrypt = await import('bcryptjs');
+			const hashedPassword = await bcrypt.hash(userData.password, 12);
+
+			// Create new user account
+			const newUser = await prisma.user.create({
+				data: {
+					name: userData.name || member.name,
+					email: member.email,
+					password: hashedPassword,
+					emailVerified: new Date(), // Auto-verify since they got the invitation
+				},
+			});
+
+			await prisma.membershipMember.update({
+				where: { id: member.id },
+				data: {
+					userId: newUser.id,
+					name: userData.name || member.name,
+					invitationToken: null,
+					invitationExpires: null,
+				},
+			});
+
+			await prisma.activityLog.create({
+				data: {
+					userId: newUser.id,
+					action: 'team_member.invitation_accepted',
+					entityType: 'MembershipMember',
+					entityId: member.id,
+					metadata: {
+						membershipId: member.membershipId,
+						createdNewAccount: true,
+					},
+				},
+			});
+
+			return {
+				success: true,
+				message: `Account created and you've been added to ${
+					member.membership.companyName ||
+					member.membership.space.name
+				} team!`,
+				data: {
+					memberId: member.id,
+					email: member.email,
+				},
+			};
+		}
+
+		// Return info for registration page
+		return {
+			success: true,
+			message: 'Invitation valid. Please create an account or log in.',
+			data: {
+				memberId: member.id,
+				email: member.email || '',
+				invitationToken,
+			},
+		};
+	} catch (error) {
+		console.error('Accept team member invitation error:', error);
+		return {
+			success: false,
+			message: 'Failed to accept invitation',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+/**
+ * Send QR code to team member via email
+ */
+export async function sendTeamMemberQRCode(
+	memberId: string
+): Promise<TeamMemberInvitationResult> {
+	try {
+		const admin = await getCurrentAdmin();
+		const user = !admin ? await getCurrentUser() : null;
+
+		if (!admin && !user) {
+			return {
+				success: false,
+				message: 'Authentication required',
+			};
+		}
+
+		const member = await prisma.membershipMember.findUnique({
+			where: { id: memberId },
+			include: {
+				membership: {
+					include: {
+						user: {
+							select: { id: true, name: true, email: true },
+						},
+						space: {
+							select: { id: true, name: true, images: true },
+						},
+					},
+				},
+			},
+		});
+
+		if (!member) {
+			return {
+				success: false,
+				message: 'Team member not found',
+			};
+		}
+
+		// Check permission
+		if (user && member.membership.userId !== user.id) {
+			return {
+				success: false,
+				message:
+					'You do not have permission to send QR code to this team member',
+			};
+		}
+
+		if (!member.email) {
+			return {
+				success: false,
+				message: 'Team member does not have an email address',
+			};
+		}
+
+		if (!member.isActive) {
+			return {
+				success: false,
+				message: 'Cannot send QR code to inactive team member',
+			};
+		}
+
+		// Generate QR code
+		const QRCode = await import('qrcode');
+		const qrCodeDataUrl = await QRCode.toDataURL(member.accessCode, {
+			width: 300,
+			margin: 2,
+			color: {
+				dark: '#000000',
+				light: '#FFFFFF',
+			},
+		});
+
+		// Import and send QR code email
+		const { createTeamMemberQRCodeEmail } = await import(
+			'@/lib/email-templates'
+		);
+
+		const qrEmail = createTeamMemberQRCodeEmail({
+			memberName: member.name,
+			memberEmail: member.email,
+			spaceName: member.membership.space.name,
+			companyName: member.membership.companyName || undefined,
+			accessCode: member.accessCode,
+			qrCodeDataUrl,
+		});
+
+		const sent = await sendEmail({
+			to: member.email,
+			subject: qrEmail.subject,
+			html: qrEmail.html,
+		});
+
+		if (!sent) {
+			return {
+				success: false,
+				message: 'Failed to send QR code email',
+			};
+		}
+
+		// Update qrCodeSentAt
+		await prisma.membershipMember.update({
+			where: { id: memberId },
+			data: { qrCodeSentAt: new Date() },
+		});
+
+		await prisma.activityLog.create({
+			data: {
+				userId: admin?.id || user?.id,
+				action: 'team_member.qr_code_sent',
+				entityType: 'MembershipMember',
+				entityId: memberId,
+				metadata: {
+					memberName: member.name,
+					memberEmail: member.email,
+				},
+			},
+		});
+
+		revalidatePath('/dashboard/subscriptions');
+		revalidatePath('/admin/members');
+
+		return {
+			success: true,
+			message: `QR code sent to ${member.email}`,
+			data: {
+				memberId,
+				email: member.email,
+			},
+		};
+	} catch (error) {
+		console.error('Send team member QR code error:', error);
+		return {
+			success: false,
+			message: 'Failed to send QR code',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+/**
+ * Get team member by access code (for portal)
+ */
+export async function getTeamMemberByAccessCode(accessCode: string): Promise<{
+	success: boolean;
+	message: string;
+	data?: {
+		member: {
+			id: string;
+			name: string;
+			email: string | null;
+			phone: string | null;
+			accessCode: string;
+			isPrimary: boolean;
+			isActive: boolean;
+		};
+		membership: {
+			id: string;
+			membershipNumber: string;
+			companyName: string | null;
+			status: string;
+			space: {
+				id: string;
+				name: string;
+				images: string[];
+			};
+		};
+		checkIns: Array<{
+			id: string;
+			checkInTime: Date;
+			checkOutTime: Date | null;
+		}>;
+	};
+	error?: string;
+}> {
+	try {
+		const normalizedCode = accessCode.toUpperCase().trim();
+
+		const member = await prisma.membershipMember.findUnique({
+			where: { accessCode: normalizedCode },
+			include: {
+				membership: {
+					include: {
+						space: {
+							select: { id: true, name: true, images: true },
+						},
+					},
+				},
+				checkIns: {
+					orderBy: { checkInTime: 'desc' },
+					take: 20,
+					select: {
+						id: true,
+						checkInTime: true,
+						checkOutTime: true,
+					},
+				},
+			},
+		});
+
+		if (!member) {
+			return {
+				success: false,
+				message: 'Invalid access code',
+			};
+		}
+
+		return {
+			success: true,
+			message: 'Team member found',
+			data: {
+				member: {
+					id: member.id,
+					name: member.name,
+					email: member.email,
+					phone: member.phone,
+					accessCode: member.accessCode,
+					isPrimary: member.isPrimary,
+					isActive: member.isActive,
+				},
+				membership: {
+					id: member.membership.id,
+					membershipNumber: member.membership.membershipNumber,
+					companyName: member.membership.companyName,
+					status: member.membership.status,
+					space: member.membership.space,
+				},
+				checkIns: member.checkIns,
+			},
+		};
+	} catch (error) {
+		console.error('Get team member by access code error:', error);
+		return {
+			success: false,
+			message: 'Failed to lookup team member',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+/**
+ * Verify invitation token validity
+ */
+export async function verifyInvitationToken(token: string): Promise<{
+	success: boolean;
+	message: string;
+	data?: {
+		memberName: string;
+		memberEmail: string | null;
+		spaceName: string;
+		companyName: string | null;
+		ownerName: string;
+		isExpired: boolean;
+	};
+}> {
+	try {
+		const member = await prisma.membershipMember.findFirst({
+			where: { invitationToken: token },
+			include: {
+				membership: {
+					include: {
+						user: { select: { name: true } },
+						space: { select: { name: true } },
+					},
+				},
+			},
+		});
+
+		if (!member) {
+			return {
+				success: false,
+				message: 'Invalid invitation token',
+			};
+		}
+
+		const isExpired =
+			member.invitationExpires !== null &&
+			member.invitationExpires < new Date();
+
+		if (member.userId) {
+			return {
+				success: false,
+				message: 'This invitation has already been accepted',
+			};
+		}
+
+		return {
+			success: true,
+			message: isExpired ? 'Invitation has expired' : 'Valid invitation',
+			data: {
+				memberName: member.name,
+				memberEmail: member.email,
+				spaceName: member.membership.space.name,
+				companyName: member.membership.companyName,
+				ownerName: member.membership.user.name,
+				isExpired,
+			},
+		};
+	} catch (error) {
+		console.error('Verify invitation token error:', error);
+		return {
+			success: false,
+			message: 'Failed to verify invitation token',
 		};
 	}
 }

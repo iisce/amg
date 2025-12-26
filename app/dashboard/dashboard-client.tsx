@@ -17,6 +17,7 @@ import {
 	QrCode,
 	CheckCircle,
 	Loader2,
+	Users,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -137,7 +138,7 @@ export default function DashboardClient({
 
 			{/* Quick Stats */}
 			<section className='container mx-auto px-4 -mt-6'>
-				<div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
+				<div className='grid grid-cols-2 md:grid-cols-5 gap-4'>
 					<Card className='bg-background shadow-lg'>
 						<CardContent className='pt-6'>
 							<div className='flex items-center gap-3'>
@@ -209,6 +210,29 @@ export default function DashboardClient({
 									</Link>
 									<p className='text-xs text-muted-foreground'>
 										Scan QR
+									</p>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card className='bg-background shadow-lg'>
+						<CardContent className='pt-6'>
+							<div className='flex items-center gap-3'>
+								<div className='p-2 bg-teal-100 rounded-full'>
+									<Users className='h-5 w-5 text-teal-600' />
+								</div>
+								<div>
+									<Link href='/dashboard/visitors'>
+										<Button
+											variant='link'
+											className='p-0 h-auto text-2xl font-bold'
+										>
+											Visitors
+										</Button>
+									</Link>
+									<p className='text-xs text-muted-foreground'>
+										Register Guests
 									</p>
 								</div>
 							</div>
