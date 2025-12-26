@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import jsQR from 'jsqr';
 import { Button } from '@/components/ui/button';
 import {
 	Card,
@@ -159,13 +160,26 @@ export default function QRScannerClient() {
 
 		if (!ctx || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
+		// Set canvas size to match video
 		canvas.width = video.videoWidth;
 		canvas.height = video.videoHeight;
+
+		// Draw current video frame to canvas
 		ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
 		const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-		// Use BarcodeDetector API if available (modern browsers)
+		// Use jsQR library (works in all browsers)
+		const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
+			inversionAttempts: 'dontInvert',
+		});
+
+		if (qrCode && qrCode.data) {
+			await handleCodeScanned(qrCode.data);
+			return;
+		}
+
+		// Fallback: Try BarcodeDetector API if available (Chrome/Edge)
 		if ('BarcodeDetector' in window) {
 			try {
 				// @ts-expect-error - BarcodeDetector is not in TypeScript types yet
