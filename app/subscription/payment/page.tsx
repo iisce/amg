@@ -140,12 +140,22 @@ export default function SubscriptionPaymentPage() {
 					membershipType = 'ANNUAL';
 				}
 
+				// Parse duration multiplier from plan name (e.g., "2 Months" -> 2, "1 Month" -> 1)
+				const planName = subscriptionData.planName || '';
+				const durationMatch = planName.match(
+					/^(\d+)\s*(month|week|day|year)/i
+				);
+				const durationMultiplier = durationMatch
+					? parseInt(durationMatch[1], 10)
+					: 1;
+
 				// Create the subscription in the database (user info from session)
 				const subscriptionResult = await createSubscription({
 					spaceId: subscriptionData.spaceId,
 					pricingPlanId: subscriptionData.planId,
 					type: membershipType,
 					startDate: new Date(),
+					durationMultiplier,
 					// Contact info comes from authenticated user's profile
 					contactName: user.name,
 					contactEmail: user.email,

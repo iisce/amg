@@ -15,10 +15,13 @@ import {
 	DollarSign,
 	LayoutGrid,
 	Calendar,
+	CalendarDays,
 	UserCog,
 	FileText,
 	QrCode,
 	Loader2,
+	Package,
+	ShoppingCart,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { updateSpace } from '@/actions';
@@ -130,6 +133,27 @@ export default function AdminSpacesClient({
 						>
 							<UserCog className='h-4 w-4' />
 							Members
+						</Link>
+						<Link
+							href='/admin/tours'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<CalendarDays className='h-4 w-4' />
+							Tours
+						</Link>
+						<Link
+							href='/admin/inventory'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<Package className='h-4 w-4' />
+							Inventory
+						</Link>
+						<Link
+							href='/admin/shop'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<ShoppingCart className='h-4 w-4' />
+							Shop
 						</Link>
 						<Link
 							href='/admin/reports'

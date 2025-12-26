@@ -97,15 +97,15 @@ export const metadata: Metadata = {
 	icons: {
 		icon: [
 			{
-				url: '/icon-light-32x32.png',
+				url: '/favicon-32x32.png',
 				media: '(prefers-color-scheme: light)',
 			},
 			{
-				url: '/icon-dark-32x32.png',
+				url: '/favicon-32x32.png',
 				media: '(prefers-color-scheme: dark)',
 			},
 			{
-				url: '/icon.svg',
+				url: '/logo.svg',
 				type: 'image/svg+xml',
 			},
 		],
@@ -123,7 +123,7 @@ const jsonLd = {
 	description:
 		'Premium coworking space offering flexible workspace solutions including shared desks, private offices, meeting rooms, and event venues in Lagos, Nigeria.',
 	url: siteUrl,
-	logo: `${siteUrl}/icon.svg`,
+	logo: `${siteUrl}/logo.svg`,
 	image: `${siteUrl}/images/entire-office.jpg`,
 	telephone: '+234-913-401-1777',
 	email: 'amgworkspace@gmail.com',

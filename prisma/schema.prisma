@@ -773,3 +773,253 @@ enum TourStatus {
   CANCELLED // Cancelled by prospect or admin
   NO_SHOW   // Prospect didn't show up
 }
+
+// ============================================
+// INVENTORY MANAGEMENT
+// ============================================
+
+model InventoryCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique // "Beverages", "Disposables", "Snacks", etc.
+  description String?
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  items InventoryItem[]
+
+  @@index([isActive])
+}
+
+model InventoryItem {
+  id         String @id @default(cuid())
+  categoryId String
+  name       String // "Sugar", "Coffee Sachet", "Disposable Cup Small"
+  sku        String @unique // Stock Keeping Unit: "INV-SUG-001"
+  description String?
+
+  // Unit management
+  baseUnit      String // Smallest trackable unit: "cube", "sachet", "piece", "ml", "gram"
+  packageUnit   String? // Larger unit for bulk: "pack", "box", "carton", "bottle"
+  unitsPerPackage Int  @default(1) // How many base units in a package (100 cubes per pack)
+
+  // Stock tracking (always in base units)
+  currentStock  Int @default(0) // Current stock in base units
+  reorderLevel  Int @default(10) // Alert when stock falls below this
+  optimalStock  Int @default(100) // Target stock level
+
+  // Pricing (for reference, inventory items don't have sale price)
+  costPerUnit   Int @default(0) // Cost per base unit in kobo (for profit calculation)
+
+  // Visibility
+  isActive      Boolean @default(true)
+  showInShop    Boolean @default(false) // Direct sale in shop (standalone items)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  category     InventoryCategory      @relation(fields: [categoryId], references: [id])
+  transactions InventoryTransaction[]
+  shopItemComponents ShopItemComponent[] // Used in composite shop items
+  shopItem     ShopItem? // Direct shop item link (for standalone items)
+
+  @@index([categoryId])
+  @@index([sku])
+  @@index([isActive])
+  @@index([showInShop])
+  @@index([currentStock])
+}
+
+model InventoryTransaction {
+  id              String @id @default(cuid())
+  inventoryItemId String
+  type            InventoryTransactionType
+  quantity        Int // Positive for additions, negative for deductions (in base units)
+  previousStock   Int // Stock before transaction
+  newStock        Int // Stock after transaction
+
+  // Reference to what caused this transaction
+  referenceType   String? // "SHOP_ORDER", "MANUAL_ADJUSTMENT", "RESTOCK", "DAMAGE", etc.
+  referenceId     String? // ID of the related record (shopOrderId, etc.)
+
+  // Additional info
+  notes           String?
+  performedBy     String? // User ID who performed the action
+  costPerUnit     Int? // Cost at time of transaction (for restocks)
+  totalCost       Int? // Total cost of transaction in kobo
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryItemId])
+  @@index([type])
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
+}
+
+enum InventoryTransactionType {
+  RESTOCK       // Adding new stock
+  SALE          // Sold through shop
+  ADJUSTMENT    // Manual correction
+  DAMAGE        // Damaged/expired items
+  TRANSFER      // Moved between locations
+  RETURN        // Returned to supplier
+}
+
+// ============================================
+// SHOP MANAGEMENT
+// ============================================
+
+model ShopCategory {
+  id          String  @id @default(cuid())
+  name        String  @unique // "Hot Drinks", "Cold Drinks", "Snacks", "Meals"
+  description String?
+  image       String? // Category image
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  items ShopItem[]
+
+  @@index([isActive])
+}
+
+model ShopItem {
+  id          String @id @default(cuid())
+  categoryId  String
+  name        String // "Coffee Cup Small", "Bottle of Coke", "Chin Chin"
+  description String?
+  image       String? // Product image
+
+  // Pricing (in kobo)
+  price       Int // Sale price
+
+  // Item type
+  isComposite Boolean @default(false) // Made from multiple inventory items
+  inventoryItemId String? @unique // For standalone items - direct link to inventory
+
+  // For composite items
+  preparationTime Int? // Time to prepare in minutes (display "Ready in X mins")
+
+  // Availability
+  isActive    Boolean @default(true)
+  isAvailable Boolean @default(true) // Auto-set based on component availability
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  category       ShopCategory       @relation(fields: [categoryId], references: [id])
+  inventoryItem  InventoryItem?     @relation(fields: [inventoryItemId], references: [id])
+  components     ShopItemComponent[] // Recipe/BOM for composite items
+  orderItems     ShopOrderItem[]
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([isAvailable])
+  @@index([inventoryItemId])
+}
+
+// Recipe/Bill of Materials for composite shop items
+model ShopItemComponent {
+  id              String @id @default(cuid())
+  shopItemId      String
+  inventoryItemId String
+  quantity        Int // Quantity of inventory item needed (in base units)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  shopItem      ShopItem      @relation(fields: [shopItemId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+
+  @@unique([shopItemId, inventoryItemId]) // One inventory item per shop item
+  @@index([shopItemId])
+  @@index([inventoryItemId])
+}
+
+model ShopOrder {
+  id          String @id @default(cuid())
+  orderNumber String @unique // Human-readable: AMG-SHP-XXXXXX
+  userId      String? // Optional - can be guest purchase
+
+  // Customer info (for guest orders or override)
+  customerName  String?
+  customerEmail String?
+  customerPhone String?
+
+  // Order details
+  subtotal    Int // Subtotal in kobo
+  tax         Int @default(0) // Tax in kobo (if applicable)
+  totalAmount Int // Final amount in kobo
+
+  // Payment
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   PaymentMethod?
+  paymentRef      String? // Paystack reference
+  paidAt          DateTime?
+
+  // Order status
+  status      ShopOrderStatus @default(PENDING)
+
+  // Fulfillment tracking
+  preparedBy    String? // Staff who prepared the order
+  preparedAt    DateTime?
+  servedBy      String? // Staff who served/delivered
+  servedAt      DateTime?
+
+  // Estimated completion
+  estimatedReadyAt DateTime? // When order should be ready
+
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  items ShopOrderItem[]
+
+  @@index([orderNumber])
+  @@index([userId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([createdAt])
+}
+
+model ShopOrderItem {
+  id          String @id @default(cuid())
+  orderId     String
+  shopItemId  String
+  quantity    Int @default(1)
+  unitPrice   Int // Price at time of order (in kobo)
+  totalPrice  Int // quantity * unitPrice
+
+  // For tracking
+  notes       String? // Special requests: "No sugar", "Extra hot"
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  order    ShopOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shopItem ShopItem  @relation(fields: [shopItemId], references: [id])
+
+  @@index([orderId])
+  @@index([shopItemId])
+}
+
+enum ShopOrderStatus {
+  PENDING       // Order placed, awaiting payment
+  PAID          // Payment confirmed, awaiting preparation
+  PREPARING     // Being prepared
+  READY         // Ready for pickup/serving
+  SERVED        // Delivered to customer
+  CANCELLED     // Order cancelled
+}

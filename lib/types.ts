@@ -26,6 +26,16 @@ import type {
 	MembershipMember,
 	Tour,
 	TourStatus,
+	// Inventory & Shop types
+	InventoryCategory,
+	InventoryItem,
+	InventoryTransaction,
+	ShopCategory,
+	ShopItem,
+	ShopItemComponent,
+	ShopOrder,
+	ShopOrderItem,
+	ShopOrderStatus,
 } from '@prisma/client';
 
 // Re-export Prisma types for convenience
@@ -57,6 +67,16 @@ export type {
 	MembershipMember,
 	Tour,
 	TourStatus,
+	// Inventory & Shop types
+	InventoryCategory,
+	InventoryItem,
+	InventoryTransaction,
+	ShopCategory,
+	ShopItem,
+	ShopItemComponent,
+	ShopOrder,
+	ShopOrderItem,
+	ShopOrderStatus,
 };
 
 // API Response types
@@ -225,6 +245,65 @@ export interface AdminDashboardStats {
 	revenueThisMonth: number;
 	occupancyRate: number;
 	checkedInToday: number;
+}
+
+// Inventory types with relations
+export interface InventoryItemWithCategory extends InventoryItem {
+	category: InventoryCategory;
+}
+
+export interface InventoryItemWithTransactions
+	extends InventoryItemWithCategory {
+	transactions: InventoryTransaction[];
+}
+
+// Shop types with relations
+export interface ShopItemWithCategory extends ShopItem {
+	category: ShopCategory;
+}
+
+export interface ShopItemComponentWithInventory extends ShopItemComponent {
+	inventoryItem: InventoryItem;
+}
+
+export interface ShopItemWithComponents extends ShopItemWithCategory {
+	components: ShopItemComponentWithInventory[];
+}
+
+export interface ShopOrderItemWithShopItem extends ShopOrderItem {
+	shopItem: ShopItem;
+}
+
+export interface ShopOrderWithItems extends ShopOrder {
+	items: ShopOrderItemWithShopItem[];
+}
+
+export interface ShopOrderWithRelations extends ShopOrder {
+	items: Array<
+		ShopOrderItem & {
+			shopItem: ShopItem;
+		}
+	>;
+	user?: Pick<User, 'id' | 'name' | 'email'> | null;
+}
+
+// Inventory stats type
+export interface InventoryStats {
+	totalCategories: number;
+	totalItems: number;
+	lowStockItems: number;
+	outOfStockItems: number;
+	totalValue: number;
+}
+
+// Shop stats type
+export interface ShopStats {
+	totalCategories: number;
+	totalItems: number;
+	availableItems: number;
+	pendingOrders: number;
+	todayOrders: number;
+	todayRevenue: number;
 }
 
 // Space data based on AMG pricing

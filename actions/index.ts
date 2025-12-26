@@ -14,3 +14,5 @@ export * from './rbac';
 export * from './team-members';
 export * from './visitors';
 export * from './tours';
+export * from './inventory';
+export * from './shop';

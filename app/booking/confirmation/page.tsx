@@ -31,6 +31,14 @@ function ConfirmationContent() {
 	const reference =
 		searchParams.get('reference') || searchParams.get('trxref') || '';
 
+	// Debug: log the URL parameters
+	console.log('Confirmation page params:', {
+		bookingId,
+		type,
+		reference,
+		allParams: Object.fromEntries(searchParams.entries()),
+	});
+
 	const [verifying, setVerifying] = useState(true);
 	const [result, setResult] = useState<VerificationResult | null>(null);
 

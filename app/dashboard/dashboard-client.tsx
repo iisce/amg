@@ -18,6 +18,7 @@ import {
 	CheckCircle,
 	Loader2,
 	Users,
+	ShoppingBag,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -138,7 +139,7 @@ export default function DashboardClient({
 
 			{/* Quick Stats */}
 			<section className='container mx-auto px-4 -mt-6'>
-				<div className='grid grid-cols-2 md:grid-cols-5 gap-4'>
+				<div className='grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4'>
 					<Card className='bg-background shadow-lg'>
 						<CardContent className='pt-6'>
 							<div className='flex items-center gap-3'>
@@ -233,6 +234,29 @@ export default function DashboardClient({
 									</Link>
 									<p className='text-xs text-muted-foreground'>
 										Register Guests
+									</p>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+
+					<Card className='bg-background shadow-lg'>
+						<CardContent className='pt-6'>
+							<div className='flex items-center gap-3'>
+								<div className='p-2 bg-pink-100 rounded-full'>
+									<ShoppingBag className='h-5 w-5 text-pink-600' />
+								</div>
+								<div>
+									<Link href='/dashboard/orders'>
+										<Button
+											variant='link'
+											className='p-0 h-auto text-2xl font-bold'
+										>
+											Orders
+										</Button>
+									</Link>
+									<p className='text-xs text-muted-foreground'>
+										Shop History
 									</p>
 								</div>
 							</div>

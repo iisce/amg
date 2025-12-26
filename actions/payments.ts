@@ -396,8 +396,13 @@ export async function initializePayment(
 
 export async function verifyPayment(reference: string): Promise<PaymentResult> {
 	try {
+		// Decode URL-encoded reference if needed
+		const decodedReference = decodeURIComponent(reference);
+
+		console.log('Verifying payment with reference:', decodedReference);
+
 		const payment = await prisma.payment.findUnique({
-			where: { reference },
+			where: { reference: decodedReference },
 			include: {
 				booking: true,
 				membership: true,
@@ -405,6 +410,27 @@ export async function verifyPayment(reference: string): Promise<PaymentResult> {
 		});
 
 		if (!payment) {
+			console.log('Payment not found for reference:', decodedReference);
+			// Try to find by partial match in case of encoding issues
+			const possiblePayment = await prisma.payment.findFirst({
+				where: {
+					reference: {
+						contains: decodedReference.replace('AMG-PAY-', ''),
+					},
+				},
+				include: {
+					booking: true,
+					membership: true,
+				},
+			});
+
+			if (possiblePayment) {
+				console.log(
+					'Found payment with partial match:',
+					possiblePayment.reference
+				);
+			}
+
 			return {
 				success: false,
 				message: 'Payment not found',

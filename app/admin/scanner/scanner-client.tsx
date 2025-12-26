@@ -23,6 +23,7 @@ import {
 	Keyboard,
 	LayoutGrid,
 	Calendar,
+	CalendarDays,
 	UserCog,
 	FileText,
 	Loader2,
@@ -36,6 +37,8 @@ import {
 	History,
 	AlertTriangle,
 	RefreshCw,
+	Package,
+	ShoppingCart,
 } from 'lucide-react';
 import {
 	adminCheckInByCode,
@@ -360,6 +363,27 @@ export default function QRScannerClient() {
 						>
 							<UserCog className='h-4 w-4' />
 							Members
+						</Link>
+						<Link
+							href='/admin/tours'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<CalendarDays className='h-4 w-4' />
+							Tours
+						</Link>
+						<Link
+							href='/admin/inventory'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<Package className='h-4 w-4' />
+							Inventory
+						</Link>
+						<Link
+							href='/admin/shop'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<ShoppingCart className='h-4 w-4' />
+							Shop
 						</Link>
 						<Link
 							href='/admin/reports'

@@ -65,6 +65,8 @@ export interface CreateSubscriptionInput {
 	// Team membership fields
 	companyName?: string;
 	maxMembers?: number; // Total members allowed (base + addons)
+	// Duration multiplier (e.g., 2 for "2 Months" plan)
+	durationMultiplier?: number;
 }
 
 // ============================================
@@ -81,24 +83,28 @@ function generateAccessCode(): string {
 	return randomBytes(4).toString('hex').toUpperCase();
 }
 
-function calculateEndDate(startDate: Date, type: MembershipType): Date {
+function calculateEndDate(
+	startDate: Date,
+	type: MembershipType,
+	multiplier: number = 1
+): Date {
 	const endDate = new Date(startDate);
 
 	switch (type) {
 		case 'DAILY':
-			endDate.setDate(endDate.getDate() + 1);
+			endDate.setDate(endDate.getDate() + 1 * multiplier);
 			break;
 		case 'WEEKLY':
-			endDate.setDate(endDate.getDate() + 7);
+			endDate.setDate(endDate.getDate() + 7 * multiplier);
 			break;
 		case 'MONTHLY':
-			endDate.setMonth(endDate.getMonth() + 1);
+			endDate.setMonth(endDate.getMonth() + 1 * multiplier);
 			break;
 		case 'QUARTERLY':
-			endDate.setMonth(endDate.getMonth() + 3);
+			endDate.setMonth(endDate.getMonth() + 3 * multiplier);
 			break;
 		case 'ANNUAL':
-			endDate.setFullYear(endDate.getFullYear() + 1);
+			endDate.setFullYear(endDate.getFullYear() + 1 * multiplier);
 			break;
 	}
 
@@ -399,7 +405,11 @@ export async function createSubscription(
 		}
 
 		const startDate = new Date(input.startDate);
-		const endDate = calculateEndDate(startDate, input.type);
+		const endDate = calculateEndDate(
+			startDate,
+			input.type,
+			input.durationMultiplier || 1
+		);
 
 		// Determine max members (default to 1 for individual subscriptions)
 		const maxMembers = input.maxMembers ?? 1;

@@ -22,12 +22,15 @@ import {
 	Phone,
 	LayoutGrid,
 	Calendar,
+	CalendarDays,
 	UserCog,
 	FileText,
 	QrCode,
 	Users,
 	Shield,
 	Building2,
+	Package,
+	ShoppingCart,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { AddStaffDialog } from '@/components/admin/add-staff-dialog';
@@ -198,6 +201,27 @@ export default function AdminMembersClient({
 						>
 							<UserCog className='h-4 w-4' />
 							Users
+						</Link>
+						<Link
+							href='/admin/tours'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<CalendarDays className='h-4 w-4' />
+							Tours
+						</Link>
+						<Link
+							href='/admin/inventory'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<Package className='h-4 w-4' />
+							Inventory
+						</Link>
+						<Link
+							href='/admin/shop'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
+						>
+							<ShoppingCart className='h-4 w-4' />
+							Shop
 						</Link>
 						<Link
 							href='/admin/reports'

@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
 	Calendar,
+	CalendarDays,
 	Users,
 	DollarSign,
 	TrendingUp,
@@ -21,6 +22,8 @@ import {
 	UserCog,
 	Loader2,
 	UserPlus,
+	Package,
+	ShoppingCart,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -207,6 +210,27 @@ export default function AdminDashboardClient({
 						>
 							<UserPlus className='h-4 w-4' />
 							Visitors
+						</Link>
+						<Link
+							href='/admin/tours'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
+						>
+							<CalendarDays className='h-4 w-4' />
+							Tours
+						</Link>
+						<Link
+							href='/admin/inventory'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
+						>
+							<Package className='h-4 w-4' />
+							Inventory
+						</Link>
+						<Link
+							href='/admin/shop'
+							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
+						>
+							<ShoppingCart className='h-4 w-4' />
+							Shop
 						</Link>
 						<Link
 							href='/admin/reports'
