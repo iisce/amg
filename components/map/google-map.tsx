@@ -11,6 +11,8 @@ declare global {
 	interface Window {
 		google: typeof google;
 		initMap: () => void;
+		__googleMapsLoading?: boolean;
+		__googleMapsCallbacks?: (() => void)[];
 	}
 }
 
@@ -28,6 +30,59 @@ interface DistanceInfo {
 interface GoogleMapProps {
 	className?: string;
 	showDistanceCalculator?: boolean;
+}
+
+// Singleton loader for Google Maps API
+function loadGoogleMapsApi(apiKey: string): Promise<void> {
+	return new Promise((resolve, reject) => {
+		// Already loaded
+		if (window.google?.maps) {
+			resolve();
+			return;
+		}
+
+		// Currently loading - add to callback queue
+		if (window.__googleMapsLoading) {
+			window.__googleMapsCallbacks = window.__googleMapsCallbacks || [];
+			window.__googleMapsCallbacks.push(() => resolve());
+			return;
+		}
+
+		// Check if script already exists in DOM
+		const existingScript = document.querySelector(
+			'script[src*="maps.googleapis.com/maps/api/js"]'
+		);
+		if (existingScript) {
+			// Script exists but not loaded yet, wait for it
+			window.__googleMapsCallbacks = window.__googleMapsCallbacks || [];
+			window.__googleMapsCallbacks.push(() => resolve());
+			return;
+		}
+
+		// Start loading
+		window.__googleMapsLoading = true;
+		window.__googleMapsCallbacks = [];
+
+		const script = document.createElement('script');
+		script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&callback=initMap`;
+		script.async = true;
+		script.defer = true;
+
+		window.initMap = () => {
+			window.__googleMapsLoading = false;
+			resolve();
+			// Call all waiting callbacks
+			window.__googleMapsCallbacks?.forEach((cb) => cb());
+			window.__googleMapsCallbacks = [];
+		};
+
+		script.onerror = () => {
+			window.__googleMapsLoading = false;
+			reject(new Error('Failed to load Google Maps'));
+		};
+
+		document.head.appendChild(script);
+	});
 }
 
 export function GoogleMap({
@@ -58,37 +113,9 @@ export function GoogleMap({
 			return;
 		}
 
-		// Check if already loaded
-		if (window.google?.maps) {
-			setIsLoaded(true);
-			return;
-		}
-
-		// Create script element
-		const script = document.createElement('script');
-		script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&callback=initMap`;
-		script.async = true;
-		script.defer = true;
-
-		window.initMap = () => {
-			setIsLoaded(true);
-		};
-
-		script.onerror = () => {
-			setLoadError('Failed to load Google Maps');
-		};
-
-		document.head.appendChild(script);
-
-		return () => {
-			// Cleanup
-			const existingScript = document.querySelector(
-				`script[src*="maps.googleapis.com"]`
-			);
-			if (existingScript) {
-				existingScript.remove();
-			}
-		};
+		loadGoogleMapsApi(apiKey)
+			.then(() => setIsLoaded(true))
+			.catch((err) => setLoadError(err.message));
 	}, []);
 
 	// Initialize map

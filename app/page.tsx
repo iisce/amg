@@ -214,7 +214,10 @@ export default function HomePage() {
 			</section>
 
 			{/* Business Hours & Location */}
-			<section className='px-4 py-16 bg-muted/50'>
+			<section
+				id='location'
+				className='px-4 py-16 bg-muted/50'
+			>
 				<div className='container mx-auto max-w-6xl'>
 					<div className='grid gap-8'>
 						{/* Location */}

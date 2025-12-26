@@ -1,6 +1,5 @@
 'use client';
 
-import type React from 'react';
 import { useEffect, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -8,7 +7,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+	Card,
+	CardContent,
+	CardHeader,
+	CardTitle,
+	CardDescription,
+} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -205,7 +210,8 @@ export default function EnquiryPage() {
 												Response
 											</h3>
 											<p className='text-sm text-muted-foreground'>
-												We&apos;ll reach out via email or phone
+												We&apos;ll reach out via email
+												or phone
 											</p>
 										</div>
 									</div>
@@ -233,7 +239,10 @@ export default function EnquiryPage() {
 											<ArrowRight className='ml-2 h-4 w-4' />
 										</Link>
 									</Button>
-									<Button variant='outline' asChild>
+									<Button
+										variant='outline'
+										asChild
+									>
 										<Link href='/'>Return Home</Link>
 									</Button>
 								</div>
@@ -383,7 +392,8 @@ export default function EnquiryPage() {
 													render={({ field }) => (
 														<FormItem>
 															<FormLabel>
-																Space of Interest
+																Space of
+																Interest
 															</FormLabel>
 															<Select
 																onValueChange={
@@ -518,27 +528,35 @@ export default function EnquiryPage() {
 												Address
 											</p>
 											<p className='text-sm text-muted-foreground'>
-												AMG Workspace, Victoria Island,
-												Lagos, Nigeria
+												AMG WorkSpace, Festac Tower, 22
+												Rd, Festac Town, Lagos, Nigeria
 											</p>
 										</div>
 									</div>
 									<div className='flex items-start gap-3'>
 										<Phone className='h-5 w-5 text-primary mt-0.5' />
 										<div>
-											<p className='font-medium'>Phone</p>
-											<p className='text-sm text-muted-foreground'>
-												+234 (0) 123 456 7890
+											<p className='font-medium'>
+												Phone / WhatsApp
 											</p>
+											<a
+												href='tel:+2349134011777'
+												className='text-sm text-muted-foreground hover:text-primary transition-colors'
+											>
+												+234 913 401 1777
+											</a>
 										</div>
 									</div>
 									<div className='flex items-start gap-3'>
 										<Mail className='h-5 w-5 text-primary mt-0.5' />
 										<div>
 											<p className='font-medium'>Email</p>
-											<p className='text-sm text-muted-foreground'>
-												hello@amgworkspace.com
-											</p>
+											<a
+												href='mailto:amgworkspace@gmail.com'
+												className='text-sm text-muted-foreground hover:text-primary transition-colors'
+											>
+												amgworkspace@gmail.com
+											</a>
 										</div>
 									</div>
 									<div className='flex items-start gap-3'>
@@ -546,9 +564,9 @@ export default function EnquiryPage() {
 										<div>
 											<p className='font-medium'>Hours</p>
 											<p className='text-sm text-muted-foreground'>
-												Mon - Fri: 8am - 8pm
+												Mon - Fri: 9am - 6pm
 												<br />
-												Sat: 9am - 5pm
+												Sat: 11am - 4pm
 												<br />
 												Sun: Closed
 											</p>
