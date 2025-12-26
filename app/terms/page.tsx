@@ -1,3 +1,15 @@
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+	title: 'Terms of Service',
+	description:
+		'AMG Workspace Terms of Service. Read our terms and conditions for using our coworking spaces and services.',
+	robots: {
+		index: true,
+		follow: true,
+	},
+};
+
 export default function TermsPage() {
 	return (
 		<main className='container mx-auto max-w-2xl py-12 px-4'>

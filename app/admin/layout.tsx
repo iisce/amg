@@ -3,16 +3,18 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
 	title: {
-		template: '%s | Dashboard | AMG Workspace',
-		default: 'Dashboard | AMG Workspace',
+		template: '%s | Admin | AMG Workspace',
+		default: 'Admin | AMG Workspace',
 	},
 	robots: {
 		index: false,
 		follow: false,
+		noarchive: true,
+		nosnippet: true,
 	},
 };
 
-export default function DashboardLayout({
+export default function AdminLayout({
 	children,
 }: {
 	children: React.ReactNode;

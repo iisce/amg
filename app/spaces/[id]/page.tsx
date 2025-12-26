@@ -53,8 +53,8 @@ export async function generateMetadata({
 		space.capacity === 1 ? 'person' : 'people'
 	}. ${spaceType} available.`;
 
-	// Use first image or default
-	const ogImage = space.images?.[0] || '/images/og-default.jpg';
+	// Use first image or default to the main office image
+	const ogImage = space.images?.[0] || '/images/entire-office.jpg';
 	const fullOgImage = ogImage.startsWith('http')
 		? ogImage
 		: `${BASE_URL}${ogImage}`;

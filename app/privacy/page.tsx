@@ -1,3 +1,15 @@
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+	title: 'Privacy Policy',
+	description:
+		'AMG Workspace Privacy Policy. Learn how we collect, use, and protect your personal information.',
+	robots: {
+		index: true,
+		follow: true,
+	},
+};
+
 export default function PrivacyPage() {
 	return (
 		<main className='container mx-auto max-w-2xl py-12 px-4'>
