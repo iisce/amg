@@ -125,32 +125,33 @@ const jsonLd = {
 	url: siteUrl,
 	logo: `${siteUrl}/icon.svg`,
 	image: `${siteUrl}/images/entire-office.jpg`,
-	telephone: '+234-XXX-XXX-XXXX', // Update with actual phone
-	email: 'hello@amgworkspace.com', // Update with actual email
+	telephone: '+234-913-401-1777',
+	email: 'amgworkspace@gmail.com',
 	address: {
 		'@type': 'PostalAddress',
-		streetAddress: 'Lagos', // Update with actual address
-		addressLocality: 'Lagos',
+		streetAddress: 'Festac Tower, 22 Rd',
+		addressLocality: 'Festac Town',
 		addressRegion: 'Lagos',
+		postalCode: '102102',
 		addressCountry: 'NG',
 	},
 	geo: {
 		'@type': 'GeoCoordinates',
-		latitude: 6.5244, // Update with actual coordinates
-		longitude: 3.3792,
+		latitude: 6.4650909,
+		longitude: 3.2850825,
 	},
 	openingHoursSpecification: [
 		{
 			'@type': 'OpeningHoursSpecification',
 			dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-			opens: '08:00',
+			opens: '09:00',
 			closes: '18:00',
 		},
 		{
 			'@type': 'OpeningHoursSpecification',
 			dayOfWeek: 'Saturday',
-			opens: '09:00',
-			closes: '15:00',
+			opens: '11:00',
+			closes: '16:00',
 		},
 	],
 	priceRange: '₦₦',

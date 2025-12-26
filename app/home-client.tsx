@@ -121,6 +121,16 @@ export default function HomeClient() {
 						</Button>
 						<Button
 							size='lg'
+							asChild
+							className='bg-secondary text-secondary-foreground hover:bg-secondary/90'
+						>
+							<Link href='/book-tour'>
+								Book a Tour
+								<ArrowRight className='ml-2 h-4 w-4' />
+							</Link>
+						</Button>
+						<Button
+							size='lg'
 							variant='outline'
 							asChild
 							className='border-secondary text-secondary hover:bg-secondary/10 bg-transparent'
@@ -335,7 +345,17 @@ export default function HomeClient() {
 								entrepreneurs, and creatives. Find your perfect
 								workspace today.
 							</p>
-							<div className='flex flex-col sm:flex-row gap-4 justify-center'>
+							<div className='flex flex-col sm:flex-row gap-4 justify-center flex-wrap'>
+								<Button
+									size='lg'
+									asChild
+									className='bg-secondary text-secondary-foreground hover:bg-secondary/90'
+								>
+									<Link href='/book-tour'>
+										Book a Tour
+										<ArrowRight className='ml-2 h-4 w-4' />
+									</Link>
+								</Button>
 								<Button
 									size='lg'
 									asChild
