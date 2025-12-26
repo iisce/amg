@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, UserRole, TourStatus } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { config } from 'dotenv';
@@ -17,9 +17,12 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
 	console.log('🌱 Starting database seed...');
 
-	// Clear existing data
+	// Clear existing data (order matters due to foreign keys)
 	console.log('🗑️  Clearing existing data...');
+	await prisma.visitor.deleteMany();
+	await prisma.tour.deleteMany();
 	await prisma.membershipCheckIn.deleteMany();
+	await prisma.membershipMember.deleteMany();
 	await prisma.payment.deleteMany();
 	await prisma.booking.deleteMany();
 	await prisma.membership.deleteMany();
@@ -846,6 +849,92 @@ async function main() {
 		});
 	}
 
+	// ============================================
+	// TOUR BOOKINGS (Sample workspace inspections)
+	// ============================================
+	console.log('🏢 Creating sample tour bookings...');
+
+	const tours = [
+		{
+			name: 'Oluwaseun Adeyemi',
+			email: 'seun.adeyemi@techstartup.ng',
+			phone: '+234 801 234 5678',
+			company: 'Tech Startup Nigeria',
+			preferredDate: new Date('2025-01-02T10:00:00'),
+			confirmedDate: new Date('2025-01-02T10:00:00'),
+			interestedIn: 'Private Office',
+			groupSize: 3,
+			budget: '₦150,000 - ₦250,000/month',
+			source: 'Google Search',
+			message: 'Looking for a 4-person office for our dev team',
+			status: TourStatus.CONFIRMED,
+			confirmedBy: 'admin@amgworkspace.com',
+		},
+		{
+			name: 'Amara Okonkwo',
+			email: 'amara@creativestudio.com',
+			phone: '+234 802 345 6789',
+			company: 'Creative Studio Lagos',
+			preferredDate: new Date('2025-01-03T14:00:00'),
+			interestedIn: 'Shared Desk',
+			groupSize: 1,
+			budget: '₦30,000 - ₦50,000/month',
+			source: 'Instagram',
+			message: 'Freelance designer looking for flexible workspace',
+			status: TourStatus.PENDING,
+		},
+		{
+			name: 'Chukwuemeka Nwosu',
+			email: 'emeka@lawfirm.ng',
+			phone: '+234 803 456 7890',
+			company: 'Nwosu & Associates',
+			preferredDate: new Date('2024-12-20T11:00:00'),
+			confirmedDate: new Date('2024-12-20T11:00:00'),
+			interestedIn: 'Board Room',
+			groupSize: 6,
+			source: 'Referral',
+			message: 'Need meeting space for client consultations',
+			status: TourStatus.COMPLETED,
+			confirmedBy: 'admin@amgworkspace.com',
+			conductedBy: 'frontdesk@amgworkspace.com',
+			feedback:
+				'Very interested in monthly board room package. Will follow up.',
+			converted: true,
+		},
+		{
+			name: 'Fatima Ibrahim',
+			email: 'fatima@fintechng.com',
+			phone: '+234 804 567 8901',
+			company: 'FinTech Nigeria',
+			preferredDate: new Date('2024-12-18T09:00:00'),
+			confirmedDate: new Date('2024-12-18T09:00:00'),
+			interestedIn: 'Private Office',
+			groupSize: 8,
+			budget: '₦400,000+/month',
+			source: 'LinkedIn',
+			status: TourStatus.NO_SHOW,
+			confirmedBy: 'admin@amgworkspace.com',
+		},
+		{
+			name: 'David Oyelaran',
+			email: 'david@consultingfirm.ng',
+			phone: '+234 805 678 9012',
+			company: 'Oyelaran Consulting',
+			preferredDate: new Date('2024-12-15T15:00:00'),
+			interestedIn: 'Training Room',
+			groupSize: 2,
+			source: 'Google Search',
+			message: 'Looking for venue for monthly team trainings',
+			status: TourStatus.CANCELLED,
+		},
+	];
+
+	for (const tour of tours) {
+		await prisma.tour.create({ data: tour });
+	}
+
+	console.log(`✅ Created ${tours.length} sample tour bookings`);
+
 	console.log('✅ Database seed completed successfully!');
 	console.log('');
 	console.log('📊 Summary:');
@@ -859,6 +948,7 @@ async function main() {
 	console.log('   - 7 Booking Plans');
 	console.log('   - Time Slots for booking spaces');
 	console.log('   - 20 Public Holidays');
+	console.log('   - 5 Sample Tour Bookings');
 	console.log('');
 	console.log('🔐 Admin Credentials:');
 	console.log('   Email: superadmin@amgworkspace.com | Role: SUPER_ADMIN');
