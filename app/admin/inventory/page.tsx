@@ -41,12 +41,24 @@ export default async function AdminInventoryPage() {
 		<Suspense fallback={<LoadingState />}>
 			<AdminInventoryClient
 				categories={
-					categoriesResult.success ? categoriesResult.data : []
+					categoriesResult.success && categoriesResult.data
+						? categoriesResult.data
+						: []
 				}
-				items={itemsResult.success ? itemsResult.data : []}
-				stats={statsResult.success ? statsResult.data : null}
+				items={
+					itemsResult.success && itemsResult.data
+						? itemsResult.data
+						: []
+				}
+				stats={
+					statsResult.success && statsResult.data
+						? statsResult.data
+						: null
+				}
 				lowStockItems={
-					lowStockResult.success ? lowStockResult.data : []
+					lowStockResult.success && lowStockResult.data
+						? lowStockResult.data
+						: []
 				}
 				admin={admin}
 			/>

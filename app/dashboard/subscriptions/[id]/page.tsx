@@ -94,9 +94,13 @@ export default async function SubscriptionDetailPage({ params }: PageProps) {
 		notFound();
 	}
 
-	const subscription = subscriptionResult.data as NonNullable<
-		typeof subscriptionResult.data
-	>;
+	// getSubscriptionById returns single object, handle union type
+	const subscription = Array.isArray(subscriptionResult.data)
+		? subscriptionResult.data[0]
+		: subscriptionResult.data;
+	if (!subscription) {
+		notFound();
+	}
 
 	// Fetch attendance data
 	const attendanceResult = await getMembershipAttendance(id);

@@ -527,6 +527,7 @@ export function AdminInventoryClient({
 											</div>
 											<div className='col-span-2 flex items-center gap-2'>
 												<input
+													title='show'
 													type='checkbox'
 													id='showInShop'
 													name='showInShop'
@@ -761,7 +762,7 @@ export function AdminInventoryClient({
 											<Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
 											<Input
 												placeholder='Search items...'
-												className='pl-9 w-[200px]'
+												className='pl-9 w-50'
 												value={searchTerm}
 												onChange={(e) =>
 													setSearchTerm(
@@ -774,7 +775,7 @@ export function AdminInventoryClient({
 											value={categoryFilter}
 											onValueChange={setCategoryFilter}
 										>
-											<SelectTrigger className='w-[150px]'>
+											<SelectTrigger className='w-37.5'>
 												<SelectValue placeholder='Category' />
 											</SelectTrigger>
 											<SelectContent>
@@ -1438,6 +1439,7 @@ export function AdminInventoryClient({
 							<div className='grid grid-cols-2 gap-4'>
 								<div className='flex items-center space-x-2'>
 									<input
+										title='show'
 										type='checkbox'
 										id='edit-showInShop'
 										name='showInShop'
@@ -1452,6 +1454,7 @@ export function AdminInventoryClient({
 								</div>
 								<div className='flex items-center space-x-2'>
 									<input
+										title='active'
 										type='checkbox'
 										id='edit-isActive'
 										name='isActive'

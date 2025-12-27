@@ -664,7 +664,7 @@ export default function DashboardClient({
 			{/* Quick Actions */}
 			<section className='container mx-auto px-4 pb-8'>
 				<h2 className='text-lg font-semibold mb-4'>Quick Actions</h2>
-				<div className='grid grid-cols-2 md:grid-cols-4 gap-4'>
+				<div className='grid grid-cols-2 md:grid-cols-5 gap-4'>
 					<Link href='/booking'>
 						<Card className='hover:bg-muted/50 transition-colors cursor-pointer'>
 							<CardContent className='p-4 text-center'>
@@ -681,6 +681,16 @@ export default function DashboardClient({
 								<MapPin className='h-8 w-8 mx-auto mb-2 text-blue-500' />
 								<p className='text-sm font-medium'>
 									Browse Spaces
+								</p>
+							</CardContent>
+						</Card>
+					</Link>
+					<Link href='/dashboard/addons'>
+						<Card className='hover:bg-muted/50 transition-colors cursor-pointer'>
+							<CardContent className='p-4 text-center'>
+								<ShoppingBag className='h-8 w-8 mx-auto mb-2 text-purple-500' />
+								<p className='text-sm font-medium'>
+									My Add-ons
 								</p>
 							</CardContent>
 						</Card>

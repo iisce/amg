@@ -1215,58 +1215,58 @@ export async function getShopStats(options?: {
 	toDate?: Date;
 }) {
 	try {
-		const dateFilter =
-			options?.fromDate || options?.toDate
-				? {
-						createdAt: {
-							...(options.fromDate && { gte: options.fromDate }),
-							...(options.toDate && { lte: options.toDate }),
-						},
-				  }
-				: {};
+		// Get today's date range
+		const todayStart = new Date();
+		todayStart.setHours(0, 0, 0, 0);
+		const todayEnd = new Date();
+		todayEnd.setHours(23, 59, 59, 999);
 
-		const [totalOrders, totalRevenue, ordersByStatus, topItems] =
-			await Promise.all([
-				prisma.shopOrder.count({
-					where: { ...dateFilter, paymentStatus: 'PAID' },
-				}),
-				prisma.shopOrder.aggregate({
-					_sum: { totalAmount: true },
-					where: { ...dateFilter, paymentStatus: 'PAID' },
-				}),
-				prisma.shopOrder.groupBy({
-					by: ['status'],
-					_count: true,
-					where: dateFilter,
-				}),
-				prisma.shopOrderItem.groupBy({
-					by: ['shopItemId'],
-					_sum: { quantity: true, totalPrice: true },
-					orderBy: { _sum: { quantity: 'desc' } },
-					take: 10,
-				}),
-			]);
-
-		// Get item names for top items
-		const itemIds = topItems.map((i) => i.shopItemId);
-		const items = await prisma.shopItem.findMany({
-			where: { id: { in: itemIds } },
-			select: { id: true, name: true },
-		});
-
-		const topItemsWithNames = topItems.map((item) => ({
-			...item,
-			name:
-				items.find((i) => i.id === item.shopItemId)?.name || 'Unknown',
-		}));
+		const [
+			totalShopItems,
+			totalInventoryShopItems,
+			totalCategories,
+			pendingOrdersCount,
+			todayOrders,
+			todayRevenue,
+		] = await Promise.all([
+			// Count all shop items
+			prisma.shopItem.count(),
+			// Count inventory items marked for shop
+			prisma.inventoryItem.count({
+				where: { showInShop: true },
+			}),
+			// Count all categories
+			prisma.shopCategory.count(),
+			// Count pending orders (not completed/cancelled)
+			prisma.shopOrder.count({
+				where: {
+					status: { in: ['PENDING', 'PAID', 'PREPARING', 'READY'] },
+				},
+			}),
+			// Count today's orders
+			prisma.shopOrder.count({
+				where: {
+					createdAt: { gte: todayStart, lte: todayEnd },
+				},
+			}),
+			// Sum today's revenue (paid orders only)
+			prisma.shopOrder.aggregate({
+				_sum: { totalAmount: true },
+				where: {
+					createdAt: { gte: todayStart, lte: todayEnd },
+					paymentStatus: 'PAID',
+				},
+			}),
+		]);
 
 		return {
 			success: true,
 			data: {
-				totalOrders,
-				totalRevenue: totalRevenue._sum.totalAmount || 0,
-				ordersByStatus,
-				topItems: topItemsWithNames,
+				totalItems: totalShopItems + totalInventoryShopItems,
+				totalCategories,
+				pendingOrders: pendingOrdersCount,
+				todayOrders,
+				todayRevenue: todayRevenue._sum.totalAmount || 0,
 			},
 		};
 	} catch (error) {

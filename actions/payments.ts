@@ -720,7 +720,7 @@ export async function recordManualPayment(input: {
 
 			// Send booking confirmation email
 			const booking = await prisma.booking.findUnique({
-				where: { id: payment.bookingId },
+				where: { id: input.bookingId },
 				include: {
 					user: { select: { name: true, email: true } },
 					space: { select: { name: true } },
@@ -993,7 +993,10 @@ export async function initializeAddonPayment(input: {
 		}
 
 		// Verify ownership
-		if (addonPurchase.membership.userId !== user.id) {
+		if (
+			!addonPurchase.membership ||
+			addonPurchase.membership.userId !== user.id
+		) {
 			return {
 				success: false,
 				message: 'Unauthorized',

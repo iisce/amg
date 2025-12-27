@@ -38,23 +38,39 @@ export default async function AdminShopPage() {
 		inventoryResult,
 	] = await Promise.all([
 		getShopCategories({ includeItems: false }),
-		getShopItems({ includeComponents: true }),
+		getShopItems(),
 		getPendingOrders(),
 		getShopStats(),
-		getInventoryItems({ isActive: true }),
+		getInventoryItems({ activeOnly: true }),
 	]);
 
 	return (
 		<Suspense fallback={<LoadingState />}>
 			<AdminShopClient
 				categories={
-					categoriesResult.success ? categoriesResult.data : []
+					categoriesResult.success && categoriesResult.data
+						? categoriesResult.data
+						: []
 				}
-				items={itemsResult.success ? itemsResult.data : []}
-				pendingOrders={ordersResult.success ? ordersResult.data : []}
-				stats={statsResult.success ? statsResult.data : null}
+				items={
+					itemsResult.success && itemsResult.data
+						? itemsResult.data
+						: []
+				}
+				pendingOrders={
+					ordersResult.success && ordersResult.data
+						? ordersResult.data
+						: []
+				}
+				stats={
+					statsResult.success && statsResult.data
+						? statsResult.data
+						: null
+				}
 				inventoryItems={
-					inventoryResult.success ? inventoryResult.data : []
+					inventoryResult.success && inventoryResult.data
+						? inventoryResult.data
+						: []
 				}
 				admin={admin}
 			/>

@@ -11,9 +11,13 @@ export default async function ProfilePage() {
 
 	// Fetch user's subscriptions
 	const subscriptionsResult = await getUserSubscriptions();
-	const subscriptions = subscriptionsResult.success
+	const subscriptionsData = subscriptionsResult.success
 		? subscriptionsResult.data || []
 		: [];
+	// getUserSubscriptions always returns an array
+	const subscriptions = Array.isArray(subscriptionsData)
+		? subscriptionsData
+		: [subscriptionsData];
 
 	// Map to client-friendly format
 	const formattedSubscriptions = subscriptions.map((sub) => ({
@@ -38,8 +42,8 @@ export default async function ProfilePage() {
 				id: user.id,
 				name: user.name,
 				email: user.email,
-				phone: user.phone,
-				company: user.company,
+				phone: user.phone || null,
+				company: user.company || null,
 			}}
 			subscriptions={formattedSubscriptions}
 		/>

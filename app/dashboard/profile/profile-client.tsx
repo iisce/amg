@@ -28,7 +28,7 @@ import QRCode from 'qrcode';
 interface Subscription {
 	id: string;
 	membershipNumber: string;
-	accessCode: string;
+	accessCode: string | null;
 	status: string;
 	startDate: string;
 	endDate: string;
@@ -286,26 +286,29 @@ export function ProfileClient({ user, subscriptions }: ProfileClientProps) {
 													</span>
 													<div className='flex items-center gap-2'>
 														<code className='bg-muted px-2 py-0.5 rounded text-xs font-mono'>
-															{sub.accessCode}
+															{sub.accessCode ||
+																'N/A'}
 														</code>
-														<Button
-															variant='ghost'
-															size='icon'
-															className='h-6 w-6'
-															onClick={() =>
-																handleCopyAccessCode(
-																	sub.accessCode,
-																	sub.id
-																)
-															}
-														>
-															{copiedCode ===
-															sub.id ? (
-																<CheckCircle className='h-3 w-3 text-green-600' />
-															) : (
-																<Copy className='h-3 w-3' />
-															)}
-														</Button>
+														{sub.accessCode && (
+															<Button
+																variant='ghost'
+																size='icon'
+																className='h-6 w-6'
+																onClick={() =>
+																	handleCopyAccessCode(
+																		sub.accessCode!,
+																		sub.id
+																	)
+																}
+															>
+																{copiedCode ===
+																sub.id ? (
+																	<CheckCircle className='h-3 w-3 text-green-600' />
+																) : (
+																	<Copy className='h-3 w-3' />
+																)}
+															</Button>
+														)}
 													</div>
 												</div>
 												<div className='flex justify-between'>

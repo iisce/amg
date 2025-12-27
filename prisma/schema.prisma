@@ -37,7 +37,8 @@ model User {
   activityLogs       ActivityLog[]
   enquiries          Enquiry[]
   teamMemberships    MembershipMember[] // Team memberships where user is a member
-  visitors           Visitor[]          @relation("VisitorHost") // Visitors this user is hosting
+  visitors           Visitor[]           @relation("VisitorHost") // Visitors this user is hosting
+  addonPurchases     AddonPurchase[] // Purchased add-ons
 
   @@index([email])
   @@index([role])
@@ -266,16 +267,27 @@ model PerkUsage {
   @@index([usedAt])
 }
 
-// Purchasable add-ons (e.g., "Photo studio ₦5,000/hr")
+// Purchasable add-ons (e.g., "Photo studio ₦5,000/hr", "Extra team member", "5 coffees")
 model Addon {
   id          String  @id @default(cuid())
-  name        String // "Photo Studio Session"
+  name        String // "Photo Studio Session", "Extra Team Member", "5 Small Coffees"
   description String?
   spaceId     String? // What space does this addon give access to (null for non-space addons)
+
+  // Type determines where this addon can be used
+  type     AddonType @default(UNIVERSAL)
+  category String? // For grouping: "Meeting Room Extras", "Beverages", "Team"
 
   // Pricing
   price           Int // Price in kobo
   durationMinutes Int @default(60) // Duration included (e.g., 60 for 1 hour)
+
+  // Unit configuration
+  unitType  AddonUnitType @default(QUANTITY) // How the addon is measured
+  unitLabel String? // Custom label: "coffees", "hours", "members", "passes"
+
+  // Limits
+  maxQuantityPerPurchase Int? // Max quantity allowed per purchase (null = unlimited)
 
   // Availability
   isActive             Boolean @default(true)
@@ -292,15 +304,32 @@ model Addon {
 
   @@index([spaceId])
   @@index([isActive])
+  @@index([type])
+  @@index([category])
+}
+
+enum AddonType {
+  SUBSCRIPTION // Extra team member, parking, locker - attached to membership
+  BOOKING // Extra hour, AV equipment, catering - attached to booking
+  SHOP // Coffee bundles, print credits - standalone purchase
+  UNIVERSAL // Can be used anywhere
+}
+
+enum AddonUnitType {
+  QUANTITY // 5 coffees, 10 prints
+  HOURS // 2 extra hours
+  DAYS // 5 day passes
+  ACCESS // Single access item (parking spot, locker)
 }
 
 // Track addon purchases
 model AddonPurchase {
   id           String  @id @default(cuid())
   addonId      String
-  membershipId String
+  userId       String // Who purchased this addon
+  membershipId String? // If attached to a subscription (null for shop/standalone)
   paymentId    String?
-  bookingId    String? @unique // If a booking was created from this addon
+  bookingId    String? @unique // If attached to a booking or created from addon
 
   // Quantity and usage
   quantity     Int @default(1) // How many units purchased
@@ -317,12 +346,14 @@ model AddonPurchase {
   updatedAt DateTime            @updatedAt
 
   // Relations
-  addon      Addon      @relation(fields: [addonId], references: [id])
-  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
-  payment    Payment?   @relation(fields: [paymentId], references: [id])
-  booking    Booking?   @relation(fields: [bookingId], references: [id])
+  addon      Addon       @relation(fields: [addonId], references: [id])
+  user       User        @relation(fields: [userId], references: [id])
+  membership Membership? @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  payment    Payment?    @relation(fields: [paymentId], references: [id])
+  booking    Booking?    @relation(fields: [bookingId], references: [id])
 
   @@index([addonId])
+  @@index([userId])
   @@index([membershipId])
   @@index([status])
   @@index([expiresAt])
@@ -338,6 +369,7 @@ enum PerkPeriod {
 enum AddonPurchaseStatus {
   PENDING
   ACTIVE
+  PARTIALLY_USED // Some quantity used but not all
   USED
   EXPIRED
   CANCELLED
@@ -474,9 +506,9 @@ model Membership {
   daysAllowed Int? // Number of days allowed per billing period
 
   // Team/Company membership fields
-  companyName       String? // Company name for team subscriptions
-  maxMembers        Int       @default(1) // Maximum team members allowed (base + addons)
-  currentOccupancy  Int       @default(0) // Current number of checked-in members
+  companyName      String? // Company name for team subscriptions
+  maxMembers       Int     @default(1) // Maximum team members allowed (base + addons)
+  currentOccupancy Int     @default(0) // Current number of checked-in members
 
   // Pause functionality
   pausedAt        DateTime? // When subscription was paused
@@ -513,14 +545,14 @@ model MembershipMember {
   userId       String? // Optional: linked user account (null for guest members)
 
   // For guest members without accounts
-  name         String // Required: member's name
-  email        String? // Optional: for notifications
-  phone        String? // Optional: for contact
+  name  String // Required: member's name
+  email String? // Optional: for notifications
+  phone String? // Optional: for contact
 
   // Access control
-  accessCode   String  @unique // Unique QR/access code for this team member
-  isActive     Boolean @default(true)
-  isPrimary    Boolean @default(false) // True for the subscription owner
+  accessCode String  @unique // Unique QR/access code for this team member
+  isActive   Boolean @default(true)
+  isPrimary  Boolean @default(false) // True for the subscription owner
 
   // Invitation system
   invitationToken   String?   @unique // Token sent via email to invite user to create account
@@ -588,33 +620,33 @@ enum MembershipStatus {
 
 // Visitors are temporary guests who visit members/subscribers
 model Visitor {
-  id        String  @id @default(cuid())
+  id String @id @default(cuid())
 
   // Visitor info
-  name      String
-  email     String?
-  phone     String?
-  company   String? // Visitor's company
-  purpose   String? // Purpose of visit
+  name    String
+  email   String?
+  phone   String?
+  company String? // Visitor's company
+  purpose String? // Purpose of visit
 
   // Who they're visiting
-  hostId    String  // User being visited (member/subscriber)
+  hostId           String // User being visited (member/subscriber)
   hostMembershipId String? // Optional: specific membership subscription
 
   // Access control
-  accessCode    String   @unique // QR code for visitor check-in
-  validFrom     DateTime @default(now())
-  validUntil    DateTime // When visitor access expires
-  maxDuration   Int      @default(480) // Max visit duration in minutes (default 8 hours)
+  accessCode  String   @unique // QR code for visitor check-in
+  validFrom   DateTime @default(now())
+  validUntil  DateTime // When visitor access expires
+  maxDuration Int      @default(480) // Max visit duration in minutes (default 8 hours)
 
   // Check-in status
-  checkInTime   DateTime?
-  checkOutTime  DateTime?
-  checkedInBy   String? // Admin/staff who processed check-in
+  checkInTime  DateTime?
+  checkOutTime DateTime?
+  checkedInBy  String? // Admin/staff who processed check-in
 
   // Status
-  status    VisitorStatus @default(PENDING)
-  notes     String?
+  status VisitorStatus @default(PENDING)
+  notes  String?
 
   // Timestamps
   createdAt DateTime @default(now())
@@ -633,11 +665,11 @@ model Visitor {
 }
 
 enum VisitorStatus {
-  PENDING    // Visitor registered but not yet arrived
+  PENDING // Visitor registered but not yet arrived
   CHECKED_IN // Visitor is currently in the workspace
   CHECKED_OUT // Visitor has left
-  EXPIRED    // Visit time expired without check-in
-  CANCELLED  // Visit was cancelled
+  EXPIRED // Visit time expired without check-in
+  CANCELLED // Visit was cancelled
 }
 
 // ============================================
@@ -722,16 +754,16 @@ model ActivityLog {
 // ============================================
 
 model Tour {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
 
   // Contact info
-  name      String
-  email     String
-  phone     String?
-  company   String?
+  name    String
+  email   String
+  phone   String?
+  company String?
 
   // Scheduling
-  preferredDate DateTime  // Requested date/time
+  preferredDate DateTime // Requested date/time
   confirmedDate DateTime? // Actual confirmed slot
   duration      Int       @default(30) // Duration in minutes
 
@@ -744,12 +776,12 @@ model Tour {
 
   // Status tracking
   status      TourStatus @default(PENDING)
-  confirmedBy String?    // Admin who confirmed the tour
-  conductedBy String?    // Staff who gave the tour
-  feedback    String?    // Post-tour notes from staff
+  confirmedBy String? // Admin who confirmed the tour
+  conductedBy String? // Staff who gave the tour
+  feedback    String? // Post-tour notes from staff
 
   // Conversion tracking
-  converted            Boolean @default(false)
+  converted               Boolean @default(false)
   convertedToMembershipId String? // If they signed up, link to their membership
 
   // Reminder tracking
@@ -767,11 +799,11 @@ model Tour {
 }
 
 enum TourStatus {
-  PENDING   // Awaiting admin confirmation
+  PENDING // Awaiting admin confirmation
   CONFIRMED // Appointment confirmed
   COMPLETED // Tour conducted
   CANCELLED // Cancelled by prospect or admin
-  NO_SHOW   // Prospect didn't show up
+  NO_SHOW // Prospect didn't show up
 }
 
 // ============================================
@@ -779,11 +811,11 @@ enum TourStatus {
 // ============================================
 
 model InventoryCategory {
-  id          String  @id @default(cuid())
-  name        String  @unique // "Beverages", "Disposables", "Snacks", etc.
+  id          String   @id @default(cuid())
+  name        String   @unique // "Beverages", "Disposables", "Snacks", etc.
   description String?
-  sortOrder   Int     @default(0)
-  isActive    Boolean @default(true)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -794,37 +826,37 @@ model InventoryCategory {
 }
 
 model InventoryItem {
-  id         String @id @default(cuid())
-  categoryId String
-  name       String // "Sugar", "Coffee Sachet", "Disposable Cup Small"
-  sku        String @unique // Stock Keeping Unit: "INV-SUG-001"
+  id          String  @id @default(cuid())
+  categoryId  String
+  name        String // "Sugar", "Coffee Sachet", "Disposable Cup Small"
+  sku         String  @unique // Stock Keeping Unit: "INV-SUG-001"
   description String?
 
   // Unit management
-  baseUnit      String // Smallest trackable unit: "cube", "sachet", "piece", "ml", "gram"
-  packageUnit   String? // Larger unit for bulk: "pack", "box", "carton", "bottle"
-  unitsPerPackage Int  @default(1) // How many base units in a package (100 cubes per pack)
+  baseUnit        String // Smallest trackable unit: "cube", "sachet", "piece", "ml", "gram"
+  packageUnit     String? // Larger unit for bulk: "pack", "box", "carton", "bottle"
+  unitsPerPackage Int     @default(1) // How many base units in a package (100 cubes per pack)
 
   // Stock tracking (always in base units)
-  currentStock  Int @default(0) // Current stock in base units
-  reorderLevel  Int @default(10) // Alert when stock falls below this
-  optimalStock  Int @default(100) // Target stock level
+  currentStock Int @default(0) // Current stock in base units
+  reorderLevel Int @default(10) // Alert when stock falls below this
+  optimalStock Int @default(100) // Target stock level
 
   // Pricing (for reference, inventory items don't have sale price)
-  costPerUnit   Int @default(0) // Cost per base unit in kobo (for profit calculation)
+  costPerUnit Int @default(0) // Cost per base unit in kobo (for profit calculation)
 
   // Visibility
-  isActive      Boolean @default(true)
-  showInShop    Boolean @default(false) // Direct sale in shop (standalone items)
+  isActive   Boolean @default(true)
+  showInShop Boolean @default(false) // Direct sale in shop (standalone items)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  category     InventoryCategory      @relation(fields: [categoryId], references: [id])
-  transactions InventoryTransaction[]
+  category           InventoryCategory      @relation(fields: [categoryId], references: [id])
+  transactions       InventoryTransaction[]
   shopItemComponents ShopItemComponent[] // Used in composite shop items
-  shopItem     ShopItem? // Direct shop item link (for standalone items)
+  shopItem           ShopItem? // Direct shop item link (for standalone items)
 
   @@index([categoryId])
   @@index([sku])
@@ -834,7 +866,7 @@ model InventoryItem {
 }
 
 model InventoryTransaction {
-  id              String @id @default(cuid())
+  id              String                   @id @default(cuid())
   inventoryItemId String
   type            InventoryTransactionType
   quantity        Int // Positive for additions, negative for deductions (in base units)
@@ -842,14 +874,14 @@ model InventoryTransaction {
   newStock        Int // Stock after transaction
 
   // Reference to what caused this transaction
-  referenceType   String? // "SHOP_ORDER", "MANUAL_ADJUSTMENT", "RESTOCK", "DAMAGE", etc.
-  referenceId     String? // ID of the related record (shopOrderId, etc.)
+  referenceType String? // "SHOP_ORDER", "MANUAL_ADJUSTMENT", "RESTOCK", "DAMAGE", etc.
+  referenceId   String? // ID of the related record (shopOrderId, etc.)
 
   // Additional info
-  notes           String?
-  performedBy     String? // User ID who performed the action
-  costPerUnit     Int? // Cost at time of transaction (for restocks)
-  totalCost       Int? // Total cost of transaction in kobo
+  notes       String?
+  performedBy String? // User ID who performed the action
+  costPerUnit Int? // Cost at time of transaction (for restocks)
+  totalCost   Int? // Total cost of transaction in kobo
 
   createdAt DateTime @default(now())
 
@@ -863,12 +895,12 @@ model InventoryTransaction {
 }
 
 enum InventoryTransactionType {
-  RESTOCK       // Adding new stock
-  SALE          // Sold through shop
-  ADJUSTMENT    // Manual correction
-  DAMAGE        // Damaged/expired items
-  TRANSFER      // Moved between locations
-  RETURN        // Returned to supplier
+  RESTOCK // Adding new stock
+  SALE // Sold through shop
+  ADJUSTMENT // Manual correction
+  DAMAGE // Damaged/expired items
+  TRANSFER // Moved between locations
+  RETURN // Returned to supplier
 }
 
 // ============================================
@@ -876,12 +908,12 @@ enum InventoryTransactionType {
 // ============================================
 
 model ShopCategory {
-  id          String  @id @default(cuid())
-  name        String  @unique // "Hot Drinks", "Cold Drinks", "Snacks", "Meals"
+  id          String   @id @default(cuid())
+  name        String   @unique // "Hot Drinks", "Cold Drinks", "Snacks", "Meals"
   description String?
   image       String? // Category image
-  sortOrder   Int     @default(0)
-  isActive    Boolean @default(true)
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -892,17 +924,17 @@ model ShopCategory {
 }
 
 model ShopItem {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   categoryId  String
   name        String // "Coffee Cup Small", "Bottle of Coke", "Chin Chin"
   description String?
   image       String? // Product image
 
   // Pricing (in kobo)
-  price       Int // Sale price
+  price Int // Sale price
 
   // Item type
-  isComposite Boolean @default(false) // Made from multiple inventory items
+  isComposite     Boolean @default(false) // Made from multiple inventory items
   inventoryItemId String? @unique // For standalone items - direct link to inventory
 
   // For composite items
@@ -917,10 +949,10 @@ model ShopItem {
   updatedAt DateTime @updatedAt
 
   // Relations
-  category       ShopCategory       @relation(fields: [categoryId], references: [id])
-  inventoryItem  InventoryItem?     @relation(fields: [inventoryItemId], references: [id])
-  components     ShopItemComponent[] // Recipe/BOM for composite items
-  orderItems     ShopOrderItem[]
+  category      ShopCategory        @relation(fields: [categoryId], references: [id])
+  inventoryItem InventoryItem?      @relation(fields: [inventoryItemId], references: [id])
+  components    ShopItemComponent[] // Recipe/BOM for composite items
+  orderItems    ShopOrderItem[]
 
   @@index([categoryId])
   @@index([isActive])
@@ -948,8 +980,8 @@ model ShopItemComponent {
 }
 
 model ShopOrder {
-  id          String @id @default(cuid())
-  orderNumber String @unique // Human-readable: AMG-SHP-XXXXXX
+  id          String  @id @default(cuid())
+  orderNumber String  @unique // Human-readable: AMG-SHP-XXXXXX
   userId      String? // Optional - can be guest purchase
 
   // Customer info (for guest orders or override)
@@ -963,26 +995,26 @@ model ShopOrder {
   totalAmount Int // Final amount in kobo
 
   // Payment
-  paymentStatus   PaymentStatus @default(PENDING)
-  paymentMethod   PaymentMethod?
-  paymentRef      String? // Paystack reference
-  paidAt          DateTime?
+  paymentStatus PaymentStatus  @default(PENDING)
+  paymentMethod PaymentMethod?
+  paymentRef    String? // Paystack reference
+  paidAt        DateTime?
 
   // Order status
-  status      ShopOrderStatus @default(PENDING)
+  status ShopOrderStatus @default(PENDING)
 
   // Fulfillment tracking
-  preparedBy    String? // Staff who prepared the order
-  preparedAt    DateTime?
-  servedBy      String? // Staff who served/delivered
-  servedAt      DateTime?
+  preparedBy String? // Staff who prepared the order
+  preparedAt DateTime?
+  servedBy   String? // Staff who served/delivered
+  servedAt   DateTime?
 
   // Estimated completion
   estimatedReadyAt DateTime? // When order should be ready
 
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   items ShopOrderItem[]
@@ -995,15 +1027,15 @@ model ShopOrder {
 }
 
 model ShopOrderItem {
-  id          String @id @default(cuid())
-  orderId     String
-  shopItemId  String
-  quantity    Int @default(1)
-  unitPrice   Int // Price at time of order (in kobo)
-  totalPrice  Int // quantity * unitPrice
+  id         String @id @default(cuid())
+  orderId    String
+  shopItemId String
+  quantity   Int    @default(1)
+  unitPrice  Int // Price at time of order (in kobo)
+  totalPrice Int // quantity * unitPrice
 
   // For tracking
-  notes       String? // Special requests: "No sugar", "Extra hot"
+  notes String? // Special requests: "No sugar", "Extra hot"
 
   createdAt DateTime @default(now())
 
@@ -1016,10 +1048,10 @@ model ShopOrderItem {
 }
 
 enum ShopOrderStatus {
-  PENDING       // Order placed, awaiting payment
-  PAID          // Payment confirmed, awaiting preparation
-  PREPARING     // Being prepared
-  READY         // Ready for pickup/serving
-  SERVED        // Delivered to customer
-  CANCELLED     // Order cancelled
+  PENDING // Order placed, awaiting payment
+  PAID // Payment confirmed, awaiting preparation
+  PREPARING // Being prepared
+  READY // Ready for pickup/serving
+  SERVED // Delivered to customer
+  CANCELLED // Order cancelled
 }

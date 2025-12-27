@@ -29,11 +29,15 @@ export default async function ShopPage() {
 
 	const [categoriesResult, itemsResult] = await Promise.all([
 		getShopCategories({ activeOnly: true, includeItems: false }),
-		getShopItems({ activeOnly: true, includeComponents: false }),
+		getShopItems({ activeOnly: true }),
 	]);
 
-	const categories = categoriesResult.success ? categoriesResult.data : [];
-	const items = itemsResult.success ? itemsResult.data : [];
+	const categories =
+		categoriesResult.success && categoriesResult.data
+			? categoriesResult.data
+			: [];
+	const items =
+		itemsResult.success && itemsResult.data ? itemsResult.data : [];
 
 	return (
 		<ShopClient

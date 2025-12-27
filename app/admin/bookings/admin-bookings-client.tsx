@@ -210,7 +210,7 @@ export default function AdminBookingsClient({
 										value={statusFilter}
 										onValueChange={setStatusFilter}
 									>
-										<SelectTrigger className='w-[150px] bg-transparent'>
+										<SelectTrigger className='w-37.5 bg-transparent'>
 											<Filter className='mr-2 h-4 w-4' />
 											<SelectValue placeholder='Status' />
 										</SelectTrigger>

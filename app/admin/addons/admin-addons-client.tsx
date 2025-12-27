@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
 	Plus,
 	Pencil,
@@ -13,6 +14,7 @@ import {
 	MoreVertical,
 	Check,
 	X,
+	ShoppingBag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -59,6 +61,7 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { createAddon, updateAddon, deleteAddon } from '@/actions/perks';
+import { AddonType, AddonUnitType } from '@prisma/client';
 
 interface Addon {
 	id: string;
@@ -68,6 +71,11 @@ interface Addon {
 	durationMinutes: number;
 	isActive: boolean;
 	availableForAllPlans: boolean;
+	type: AddonType;
+	category: string | null;
+	unitType: AddonUnitType;
+	unitLabel: string | null;
+	maxQuantityPerPurchase: number | null;
 	space: {
 		id: string;
 		name: string;
@@ -139,6 +147,11 @@ export function AdminAddonsClient({
 		durationMinutes: '60',
 		availableForAllPlans: true,
 		selectedPlanIds: [] as string[],
+		type: 'SUBSCRIPTION' as AddonType,
+		category: '',
+		unitType: 'QUANTITY' as AddonUnitType,
+		unitLabel: '',
+		maxQuantityPerPurchase: '10',
 	});
 
 	// Filter addons by search query
@@ -157,6 +170,11 @@ export function AdminAddonsClient({
 			durationMinutes: '60',
 			availableForAllPlans: true,
 			selectedPlanIds: [],
+			type: 'SUBSCRIPTION',
+			category: '',
+			unitType: 'QUANTITY',
+			unitLabel: '',
+			maxQuantityPerPurchase: '10',
 		});
 		setEditingAddon(null);
 	};
@@ -176,6 +194,13 @@ export function AdminAddonsClient({
 			durationMinutes: addon.durationMinutes.toString(),
 			availableForAllPlans: addon.availableForAllPlans,
 			selectedPlanIds: addon.availablePlans.map((p) => p.id),
+			type: addon.type,
+			category: addon.category || '',
+			unitType: addon.unitType,
+			unitLabel: addon.unitLabel || '',
+			maxQuantityPerPurchase: (
+				addon.maxQuantityPerPurchase ?? 10
+			).toString(),
 		});
 		setShowDialog(true);
 	};
@@ -183,7 +208,7 @@ export function AdminAddonsClient({
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 
-		if (!formData.name || !formData.price || !formData.durationMinutes) {
+		if (!formData.name || !formData.price) {
 			toast.error('Please fill in all required fields');
 			return;
 		}
@@ -197,11 +222,17 @@ export function AdminAddonsClient({
 					description: formData.description || undefined,
 					spaceId: formData.spaceId || undefined,
 					price: priceInKobo,
-					durationMinutes: parseInt(formData.durationMinutes),
+					durationMinutes: parseInt(formData.durationMinutes) || 60,
 					availableForAllPlans: formData.availableForAllPlans,
 					availablePlanIds: formData.availableForAllPlans
 						? undefined
 						: formData.selectedPlanIds,
+					type: formData.type,
+					category: formData.category || undefined,
+					unitType: formData.unitType,
+					unitLabel: formData.unitLabel || undefined,
+					maxQuantityPerPurchase:
+						parseInt(formData.maxQuantityPerPurchase) || 10,
 				};
 
 				const result = editingAddon
@@ -261,10 +292,18 @@ export function AdminAddonsClient({
 						Create and manage subscription add-ons
 					</p>
 				</div>
-				<Button onClick={openCreateDialog}>
-					<Plus className='mr-2 h-4 w-4' />
-					Create Add-on
-				</Button>
+				<div className='flex gap-2'>
+					<Link href='/admin/addons/purchases'>
+						<Button variant='outline'>
+							<ShoppingBag className='mr-2 h-4 w-4' />
+							View Purchases
+						</Button>
+					</Link>
+					<Button onClick={openCreateDialog}>
+						<Plus className='mr-2 h-4 w-4' />
+						Create Add-on
+					</Button>
+				</div>
 			</div>
 
 			{/* Stats Cards */}
@@ -277,7 +316,9 @@ export function AdminAddonsClient({
 						<Package className='h-4 w-4 text-muted-foreground' />
 					</CardHeader>
 					<CardContent>
-						<div className='text-2xl font-bold'>{addons.length}</div>
+						<div className='text-2xl font-bold'>
+							{addons.length}
+						</div>
 					</CardContent>
 				</Card>
 				<Card>
@@ -358,10 +399,10 @@ export function AdminAddonsClient({
 							<TableHeader>
 								<TableRow>
 									<TableHead>Name</TableHead>
+									<TableHead>Type</TableHead>
 									<TableHead>Price</TableHead>
-									<TableHead>Duration</TableHead>
+									<TableHead>Unit</TableHead>
 									<TableHead>Space</TableHead>
-									<TableHead>Availability</TableHead>
 									<TableHead>Status</TableHead>
 									<TableHead className='text-right'>
 										Actions
@@ -381,17 +422,59 @@ export function AdminAddonsClient({
 														{addon.description}
 													</p>
 												)}
+												{addon.category && (
+													<Badge
+														variant='outline'
+														className='mt-1 text-xs'
+													>
+														{addon.category}
+													</Badge>
+												)}
 											</div>
+										</TableCell>
+										<TableCell>
+											<Badge
+												variant={
+													addon.type ===
+													'SUBSCRIPTION'
+														? 'default'
+														: addon.type ===
+														  'BOOKING'
+														? 'secondary'
+														: addon.type === 'SHOP'
+														? 'outline'
+														: 'default'
+												}
+											>
+												{addon.type}
+											</Badge>
 										</TableCell>
 										<TableCell className='font-medium'>
 											{formatPrice(addon.price)}
 										</TableCell>
 										<TableCell>
-											<div className='flex items-center gap-1'>
-												<Clock className='h-3 w-3 text-muted-foreground' />
-												{formatDuration(
-													addon.durationMinutes
-												)}
+											<div className='text-sm'>
+												<span className='text-muted-foreground'>
+													{addon.unitType ===
+													'HOURS' ? (
+														<span className='flex items-center gap-1'>
+															<Clock className='h-3 w-3' />
+															{addon.unitLabel ||
+																`${addon.durationMinutes} mins`}
+														</span>
+													) : addon.unitType ===
+													  'DAYS' ? (
+														addon.unitLabel ||
+														'Days'
+													) : addon.unitType ===
+													  'ACCESS' ? (
+														addon.unitLabel ||
+														'Access'
+													) : (
+														addon.unitLabel ||
+														`Max ${addon.maxQuantityPerPurchase}`
+													)}
+												</span>
 											</div>
 										</TableCell>
 										<TableCell>
@@ -403,23 +486,6 @@ export function AdminAddonsClient({
 												<span className='text-muted-foreground'>
 													-
 												</span>
-											)}
-										</TableCell>
-										<TableCell>
-											{addon.availableForAllPlans ? (
-												<Badge className='bg-blue-100 text-blue-700'>
-													All Plans
-												</Badge>
-											) : (
-												<Badge variant='outline'>
-													{addon.availablePlans
-														.length || 0}{' '}
-													Plan
-													{addon.availablePlans
-														.length !== 1
-														? 's'
-														: ''}
-												</Badge>
 											)}
 										</TableCell>
 										<TableCell>
@@ -477,7 +543,10 @@ export function AdminAddonsClient({
 			</Card>
 
 			{/* Create/Edit Dialog */}
-			<Dialog open={showDialog} onOpenChange={setShowDialog}>
+			<Dialog
+				open={showDialog}
+				onOpenChange={setShowDialog}
+			>
 				<DialogContent className='max-w-lg max-h-[90vh] overflow-y-auto'>
 					<DialogHeader>
 						<DialogTitle>
@@ -490,7 +559,10 @@ export function AdminAddonsClient({
 						</DialogDescription>
 					</DialogHeader>
 
-					<form onSubmit={handleSubmit} className='space-y-4'>
+					<form
+						onSubmit={handleSubmit}
+						className='space-y-4'
+					>
 						<div className='space-y-2'>
 							<Label htmlFor='name'>
 								Name <span className='text-red-500'>*</span>
@@ -525,6 +597,67 @@ export function AdminAddonsClient({
 							/>
 						</div>
 
+						{/* Type and Category Row */}
+						<div className='grid grid-cols-2 gap-4'>
+							<div className='space-y-2'>
+								<Label htmlFor='type'>
+									Type <span className='text-red-500'>*</span>
+								</Label>
+								<Select
+									value={formData.type}
+									onValueChange={(value: AddonType) =>
+										setFormData((prev) => ({
+											...prev,
+											type: value,
+										}))
+									}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder='Select type...' />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value='SUBSCRIPTION'>
+											Subscription
+										</SelectItem>
+										<SelectItem value='BOOKING'>
+											Booking
+										</SelectItem>
+										<SelectItem value='SHOP'>
+											Shop
+										</SelectItem>
+										<SelectItem value='UNIVERSAL'>
+											Universal
+										</SelectItem>
+									</SelectContent>
+								</Select>
+								<p className='text-xs text-muted-foreground'>
+									{formData.type === 'SUBSCRIPTION' &&
+										'For members with active subscriptions'}
+									{formData.type === 'BOOKING' &&
+										'Add-on for bookings (e.g., extra hours)'}
+									{formData.type === 'SHOP' &&
+										'Standalone purchase (e.g., coffee bundles)'}
+									{formData.type === 'UNIVERSAL' &&
+										'Available to all users'}
+								</p>
+							</div>
+							<div className='space-y-2'>
+								<Label htmlFor='category'>Category</Label>
+								<Input
+									id='category'
+									placeholder='e.g., Beverages, Services'
+									value={formData.category}
+									onChange={(e) =>
+										setFormData((prev) => ({
+											...prev,
+											category: e.target.value,
+										}))
+									}
+								/>
+							</div>
+						</div>
+
+						{/* Price and Unit Type Row */}
 						<div className='grid grid-cols-2 gap-4'>
 							<div className='space-y-2'>
 								<Label htmlFor='price'>
@@ -548,9 +681,86 @@ export function AdminAddonsClient({
 								/>
 							</div>
 							<div className='space-y-2'>
-								<Label htmlFor='duration'>
-									Duration (minutes){' '}
+								<Label htmlFor='unitType'>
+									Unit Type{' '}
 									<span className='text-red-500'>*</span>
+								</Label>
+								<Select
+									value={formData.unitType}
+									onValueChange={(value: AddonUnitType) =>
+										setFormData((prev) => ({
+											...prev,
+											unitType: value,
+										}))
+									}
+								>
+									<SelectTrigger>
+										<SelectValue placeholder='Select unit...' />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value='QUANTITY'>
+											Quantity
+										</SelectItem>
+										<SelectItem value='HOURS'>
+											Hours
+										</SelectItem>
+										<SelectItem value='DAYS'>
+											Days
+										</SelectItem>
+										<SelectItem value='ACCESS'>
+											Access Pass
+										</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+						</div>
+
+						{/* Unit Label and Max Quantity Row */}
+						<div className='grid grid-cols-2 gap-4'>
+							<div className='space-y-2'>
+								<Label htmlFor='unitLabel'>Unit Label</Label>
+								<Input
+									id='unitLabel'
+									placeholder='e.g., "cups", "sessions"'
+									value={formData.unitLabel}
+									onChange={(e) =>
+										setFormData((prev) => ({
+											...prev,
+											unitLabel: e.target.value,
+										}))
+									}
+								/>
+								<p className='text-xs text-muted-foreground'>
+									Display label for the unit (optional)
+								</p>
+							</div>
+							<div className='space-y-2'>
+								<Label htmlFor='maxQuantity'>
+									Max Quantity per Purchase
+								</Label>
+								<Input
+									id='maxQuantity'
+									type='number'
+									min='1'
+									placeholder='10'
+									value={formData.maxQuantityPerPurchase}
+									onChange={(e) =>
+										setFormData((prev) => ({
+											...prev,
+											maxQuantityPerPurchase:
+												e.target.value,
+										}))
+									}
+								/>
+							</div>
+						</div>
+
+						{/* Duration (for time-based add-ons) */}
+						{(formData.unitType === 'HOURS' ||
+							formData.type === 'BOOKING') && (
+							<div className='space-y-2'>
+								<Label htmlFor='duration'>
+									Duration (minutes)
 								</Label>
 								<Input
 									id='duration'
@@ -564,10 +774,13 @@ export function AdminAddonsClient({
 											durationMinutes: e.target.value,
 										}))
 									}
-									required
 								/>
+								<p className='text-xs text-muted-foreground'>
+									Time allocation per unit (for booking
+									add-ons)
+								</p>
 							</div>
-						</div>
+						)}
 
 						<div className='space-y-2'>
 							<Label htmlFor='space'>
@@ -605,58 +818,60 @@ export function AdminAddonsClient({
 							</p>
 						</div>
 
-						<div className='space-y-4 border rounded-lg p-4'>
-							<div className='flex items-center justify-between'>
-								<div>
-									<Label>Available for All Plans</Label>
-									<p className='text-xs text-muted-foreground'>
-										Make this add-on available to all
-										subscription plans
-									</p>
-								</div>
-								<Switch
-									checked={formData.availableForAllPlans}
-									onCheckedChange={(checked) =>
-										setFormData((prev) => ({
-											...prev,
-											availableForAllPlans: checked,
-										}))
-									}
-								/>
-							</div>
-
-							{!formData.availableForAllPlans && (
-								<div className='space-y-2 pt-2 border-t'>
-									<Label>Select Plans</Label>
-									<div className='grid gap-2 max-h-48 overflow-y-auto'>
-										{pricingPlans.map((plan) => (
-											<div
-												key={plan.id}
-												className='flex items-center space-x-2'
-											>
-												<Checkbox
-													id={plan.id}
-													checked={formData.selectedPlanIds.includes(
-														plan.id
-													)}
-													onCheckedChange={() =>
-														togglePlanSelection(
-															plan.id
-														)
-													}
-												/>
-												<Label
-													htmlFor={plan.id}
-													className='text-sm font-normal cursor-pointer'
-												>
-													{plan.name}
-												</Label>
-											</div>
-										))}
+						{formData.type === 'SUBSCRIPTION' && (
+							<div className='space-y-4 border rounded-lg p-4'>
+								<div className='flex items-center justify-between'>
+									<div>
+										<Label>Available for All Plans</Label>
+										<p className='text-xs text-muted-foreground'>
+											Make this add-on available to all
+											subscription plans
+										</p>
 									</div>
+									<Switch
+										checked={formData.availableForAllPlans}
+										onCheckedChange={(checked) =>
+											setFormData((prev) => ({
+												...prev,
+												availableForAllPlans: checked,
+											}))
+										}
+									/>
 								</div>
-							)}
-						</div>
+
+								{!formData.availableForAllPlans && (
+									<div className='space-y-2 pt-2 border-t'>
+										<Label>Select Plans</Label>
+										<div className='grid gap-2 max-h-48 overflow-y-auto'>
+											{pricingPlans.map((plan) => (
+												<div
+													key={plan.id}
+													className='flex items-center space-x-2'
+												>
+													<Checkbox
+														id={plan.id}
+														checked={formData.selectedPlanIds.includes(
+															plan.id
+														)}
+														onCheckedChange={() =>
+															togglePlanSelection(
+																plan.id
+															)
+														}
+													/>
+													<Label
+														htmlFor={plan.id}
+														className='text-sm font-normal cursor-pointer'
+													>
+														{plan.name}
+													</Label>
+												</div>
+											))}
+										</div>
+									</div>
+								)}
+							</div>
+						)}
 
 						<DialogFooter>
 							<Button
@@ -666,7 +881,10 @@ export function AdminAddonsClient({
 							>
 								Cancel
 							</Button>
-							<Button type='submit' disabled={isPending}>
+							<Button
+								type='submit'
+								disabled={isPending}
+							>
 								{isPending
 									? 'Saving...'
 									: editingAddon

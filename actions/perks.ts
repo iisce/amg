@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/db';
 import { getCurrentUser, getCurrentAdmin } from './auth';
 import type { PerkPeriod } from '@/lib/types';
+import type { AddonType, AddonUnitType } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import {
 	startOfDay,
@@ -444,6 +445,12 @@ interface CreateAddonInput {
 	durationMinutes: number;
 	availableForAllPlans: boolean;
 	availablePlanIds?: string[];
+	// New fields
+	type?: AddonType;
+	category?: string;
+	unitType?: AddonUnitType;
+	unitLabel?: string;
+	maxQuantityPerPurchase?: number;
 }
 
 export async function createAddon(input: CreateAddonInput) {
@@ -461,6 +468,11 @@ export async function createAddon(input: CreateAddonInput) {
 				price: input.price,
 				durationMinutes: input.durationMinutes,
 				availableForAllPlans: input.availableForAllPlans,
+				type: input.type || 'UNIVERSAL',
+				category: input.category || null,
+				unitType: input.unitType || 'QUANTITY',
+				unitLabel: input.unitLabel || null,
+				maxQuantityPerPurchase: input.maxQuantityPerPurchase || null,
 				availablePlans: input.availablePlanIds?.length
 					? {
 							connect: input.availablePlanIds.map((id) => ({
@@ -510,6 +522,11 @@ export async function updateAddon(
 				price: input.price,
 				durationMinutes: input.durationMinutes,
 				availableForAllPlans: input.availableForAllPlans,
+				type: input.type,
+				category: input.category,
+				unitType: input.unitType,
+				unitLabel: input.unitLabel,
+				maxQuantityPerPurchase: input.maxQuantityPerPurchase,
 				availablePlans: input.availablePlanIds
 					? {
 							set: input.availablePlanIds.map((id) => ({ id })),
@@ -562,11 +579,24 @@ export async function deleteAddon(addonId: string) {
 export async function getAddons(options?: {
 	includeInactive?: boolean;
 	pricingPlanId?: string;
+	type?: AddonType;
+	types?: AddonType[]; // Allow multiple types (e.g., SUBSCRIPTION + UNIVERSAL)
+	category?: string;
 }) {
 	try {
+		// Build type filter
+		let typeFilter: { type?: AddonType | { in: AddonType[] } } = {};
+		if (options?.types?.length) {
+			typeFilter = { type: { in: options.types } };
+		} else if (options?.type) {
+			typeFilter = { type: options.type };
+		}
+
 		const addons = await prisma.addon.findMany({
 			where: {
 				isActive: options?.includeInactive ? undefined : true,
+				...typeFilter,
+				category: options?.category || undefined,
 				OR: options?.pricingPlanId
 					? [
 							{ availableForAllPlans: true },
@@ -602,26 +632,15 @@ export async function getAddons(options?: {
 
 export async function purchaseAddon(input: {
 	addonId: string;
-	membershipId: string;
 	quantity: number;
+	membershipId?: string; // Optional - for subscription addons
+	bookingId?: string; // Optional - for booking addons
+	// If both membershipId and bookingId are null, it's a standalone shop purchase
 }) {
 	try {
 		const user = await getCurrentUser();
 		if (!user) {
 			return { success: false, message: 'Unauthorized' };
-		}
-
-		// Verify membership belongs to user
-		const membership = await prisma.membership.findUnique({
-			where: { id: input.membershipId },
-		});
-
-		if (!membership || membership.userId !== user.id) {
-			return { success: false, message: 'Membership not found' };
-		}
-
-		if (membership.status !== 'ACTIVE') {
-			return { success: false, message: 'Membership is not active' };
 		}
 
 		// Get addon
@@ -633,18 +652,65 @@ export async function purchaseAddon(input: {
 			return { success: false, message: 'Add-on not found or inactive' };
 		}
 
+		// Validate quantity
+		if (
+			addon.maxQuantityPerPurchase &&
+			input.quantity > addon.maxQuantityPerPurchase
+		) {
+			return {
+				success: false,
+				message: `Maximum ${addon.maxQuantityPerPurchase} allowed per purchase`,
+			};
+		}
+
+		let expiresAt: Date | null = null;
+
+		// Validate membership if provided
+		if (input.membershipId) {
+			const membership = await prisma.membership.findUnique({
+				where: { id: input.membershipId },
+			});
+
+			if (!membership || membership.userId !== user.id) {
+				return { success: false, message: 'Membership not found' };
+			}
+
+			if (membership.status !== 'ACTIVE') {
+				return { success: false, message: 'Membership is not active' };
+			}
+
+			// Addon expires with the subscription
+			expiresAt = membership.endDate;
+		}
+
+		// Validate booking if provided
+		if (input.bookingId) {
+			const booking = await prisma.booking.findUnique({
+				where: { id: input.bookingId },
+			});
+
+			if (!booking || booking.userId !== user.id) {
+				return { success: false, message: 'Booking not found' };
+			}
+
+			// Addon expires after the booking
+			expiresAt = booking.endTime;
+		}
+
 		const totalAmount = addon.price * input.quantity;
 
 		// Create addon purchase (pending payment)
 		const purchase = await prisma.addonPurchase.create({
 			data: {
 				addonId: input.addonId,
-				membershipId: input.membershipId,
+				userId: user.id,
+				membershipId: input.membershipId || null,
+				bookingId: input.bookingId || null,
 				quantity: input.quantity,
 				unitPrice: addon.price,
 				totalAmount,
 				status: 'PENDING',
-				expiresAt: membership.endDate, // Expires with the subscription
+				expiresAt,
 			},
 			include: {
 				addon: {
@@ -757,7 +823,7 @@ export async function useAddon(input: {
 			return { success: false, message: 'Purchase not found' };
 		}
 
-		if (purchase.membership.userId !== user.id) {
+		if (purchase.userId !== user.id) {
 			return { success: false, message: 'Unauthorized' };
 		}
 
@@ -826,16 +892,21 @@ export async function useAddon(input: {
 					},
 				});
 
+				// Determine new status based on usage
+				const newUsedQuantity = purchase.usedQuantity + 1;
+				let newStatus: 'ACTIVE' | 'PARTIALLY_USED' | 'USED' = 'ACTIVE';
+				if (newUsedQuantity >= purchase.quantity) {
+					newStatus = 'USED';
+				} else if (newUsedQuantity > 0) {
+					newStatus = 'PARTIALLY_USED';
+				}
+
 				// Update addon purchase usage
 				const updatedPurchase = await tx.addonPurchase.update({
 					where: { id: input.addonPurchaseId },
 					data: {
 						usedQuantity: { increment: 1 },
-						bookingId: booking.id,
-						status:
-							purchase.usedQuantity + 1 >= purchase.quantity
-								? 'USED'
-								: 'ACTIVE',
+						status: newStatus,
 					},
 				});
 
@@ -854,5 +925,284 @@ export async function useAddon(input: {
 	} catch (error) {
 		console.error('Error using addon:', error);
 		return { success: false, message: 'Failed to use add-on' };
+	}
+}
+
+/**
+ * Get all addon purchases for the current user
+ */
+export async function getUserAddonPurchases(options?: {
+	status?:
+		| 'PENDING'
+		| 'ACTIVE'
+		| 'PARTIALLY_USED'
+		| 'USED'
+		| 'EXPIRED'
+		| 'CANCELLED';
+	membershipId?: string;
+	includeExpired?: boolean;
+}) {
+	try {
+		const user = await getCurrentUser();
+		if (!user) {
+			return { success: false, message: 'Unauthorized', data: [] };
+		}
+
+		const purchases = await prisma.addonPurchase.findMany({
+			where: {
+				userId: user.id,
+				membershipId: options?.membershipId || undefined,
+				status: options?.status
+					? options.status
+					: options?.includeExpired
+					? undefined
+					: { notIn: ['EXPIRED', 'CANCELLED'] },
+			},
+			include: {
+				addon: {
+					include: {
+						space: {
+							select: {
+								id: true,
+								name: true,
+								slug: true,
+								images: true,
+							},
+						},
+					},
+				},
+				membership: {
+					select: {
+						id: true,
+						membershipNumber: true,
+						space: { select: { name: true } },
+					},
+				},
+				booking: {
+					select: {
+						id: true,
+						bookingNumber: true,
+						space: { select: { name: true } },
+					},
+				},
+			},
+			orderBy: { createdAt: 'desc' },
+		});
+
+		return { success: true, data: purchases };
+	} catch (error) {
+		console.error('Error fetching user addon purchases:', error);
+		return {
+			success: false,
+			message: 'Failed to fetch purchases',
+			data: [],
+		};
+	}
+}
+
+/**
+ * Admin: Get all addon purchases with filters
+ */
+export async function getAddonPurchases(options?: {
+	status?:
+		| 'PENDING'
+		| 'ACTIVE'
+		| 'PARTIALLY_USED'
+		| 'USED'
+		| 'EXPIRED'
+		| 'CANCELLED';
+	userId?: string;
+	addonId?: string;
+	addonType?: AddonType;
+	limit?: number;
+}) {
+	try {
+		const admin = await getCurrentAdmin();
+		if (!admin) {
+			return { success: false, message: 'Unauthorized', data: [] };
+		}
+
+		const purchases = await prisma.addonPurchase.findMany({
+			where: {
+				status: options?.status || undefined,
+				userId: options?.userId || undefined,
+				addonId: options?.addonId || undefined,
+				addon: options?.addonType
+					? { type: options.addonType }
+					: undefined,
+			},
+			include: {
+				addon: true,
+				user: {
+					select: { id: true, name: true, email: true },
+				},
+				membership: {
+					select: {
+						id: true,
+						membershipNumber: true,
+						space: { select: { name: true } },
+					},
+				},
+				booking: {
+					select: {
+						id: true,
+						bookingNumber: true,
+						space: { select: { name: true } },
+					},
+				},
+				payment: {
+					select: { id: true, status: true, reference: true },
+				},
+			},
+			orderBy: { createdAt: 'desc' },
+			take: options?.limit || 100,
+		});
+
+		return { success: true, data: purchases };
+	} catch (error) {
+		console.error('Error fetching addon purchases:', error);
+		return {
+			success: false,
+			message: 'Failed to fetch purchases',
+			data: [],
+		};
+	}
+}
+
+/**
+ * Admin: Mark addon as used/fulfilled
+ */
+export async function markAddonUsed(
+	purchaseId: string,
+	quantityToUse: number = 1,
+	notes?: string
+) {
+	try {
+		const admin = await getCurrentAdmin();
+		if (!admin) {
+			return { success: false, message: 'Unauthorized' };
+		}
+
+		const purchase = await prisma.addonPurchase.findUnique({
+			where: { id: purchaseId },
+		});
+
+		if (!purchase) {
+			return { success: false, message: 'Purchase not found' };
+		}
+
+		if (
+			purchase.status !== 'ACTIVE' &&
+			purchase.status !== 'PARTIALLY_USED'
+		) {
+			return { success: false, message: 'Purchase is not active' };
+		}
+
+		const newUsedQuantity = purchase.usedQuantity + quantityToUse;
+		if (newUsedQuantity > purchase.quantity) {
+			return {
+				success: false,
+				message: `Only ${
+					purchase.quantity - purchase.usedQuantity
+				} remaining`,
+			};
+		}
+
+		let newStatus: 'ACTIVE' | 'PARTIALLY_USED' | 'USED' = 'PARTIALLY_USED';
+		if (newUsedQuantity >= purchase.quantity) {
+			newStatus = 'USED';
+		}
+
+		const updated = await prisma.addonPurchase.update({
+			where: { id: purchaseId },
+			data: {
+				usedQuantity: newUsedQuantity,
+				status: newStatus,
+				notes: notes
+					? purchase.notes
+						? `${purchase.notes}\n${notes}`
+						: notes
+					: purchase.notes,
+			},
+			include: {
+				addon: true,
+				user: { select: { name: true, email: true } },
+			},
+		});
+
+		revalidatePath('/admin/addons/purchases');
+		return {
+			success: true,
+			message: `Marked ${quantityToUse} ${
+				updated.addon.unitLabel || 'unit(s)'
+			} as used`,
+			data: updated,
+		};
+	} catch (error) {
+		console.error('Error marking addon used:', error);
+		return { success: false, message: 'Failed to update purchase' };
+	}
+}
+
+/**
+ * Get addon purchase stats for admin dashboard
+ */
+export async function getAddonStats() {
+	try {
+		const admin = await getCurrentAdmin();
+		if (!admin) {
+			return { success: false, message: 'Unauthorized' };
+		}
+
+		const [
+			totalAddons,
+			activeAddons,
+			totalPurchases,
+			pendingPurchases,
+			activePurchases,
+			totalRevenue,
+			purchasesByType,
+		] = await Promise.all([
+			prisma.addon.count(),
+			prisma.addon.count({ where: { isActive: true } }),
+			prisma.addonPurchase.count(),
+			prisma.addonPurchase.count({ where: { status: 'PENDING' } }),
+			prisma.addonPurchase.count({
+				where: { status: { in: ['ACTIVE', 'PARTIALLY_USED'] } },
+			}),
+			prisma.addonPurchase.aggregate({
+				where: { status: { notIn: ['PENDING', 'CANCELLED'] } },
+				_sum: { totalAmount: true },
+			}),
+			prisma.addon.findMany({
+				select: {
+					type: true,
+					_count: { select: { purchases: true } },
+				},
+			}),
+		]);
+
+		// Group purchases by type
+		const byType = purchasesByType.reduce((acc, addon) => {
+			const type = addon.type;
+			acc[type] = (acc[type] || 0) + addon._count.purchases;
+			return acc;
+		}, {} as Record<string, number>);
+
+		return {
+			success: true,
+			data: {
+				totalAddons,
+				activeAddons,
+				totalPurchases,
+				pendingPurchases,
+				activePurchases,
+				totalRevenue: totalRevenue._sum.totalAmount || 0,
+				purchasesByType: byType,
+			},
+		};
+	} catch (error) {
+		console.error('Error fetching addon stats:', error);
+		return { success: false, message: 'Failed to fetch stats' };
 	}
 }

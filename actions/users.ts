@@ -754,19 +754,29 @@ export async function createStaff(data: {
 	email: string;
 	password: string;
 	phone?: string;
-	role: 'ADMIN' | 'STAFF' | 'SUPER_ADMIN';
-}): Promise<ActionResponse<User>> {
+	role:
+		| 'ADMIN'
+		| 'STAFF'
+		| 'SUPER_ADMIN'
+		| 'FRONT_DESK'
+		| 'FRONT_DESK_ASSISTANT';
+}): Promise<UserResult> {
 	try {
 		// Get current admin
 		const admin = await getCurrentAdmin();
 		if (!admin) {
-			return { success: false, error: 'Unauthorized' };
+			return {
+				success: false,
+				message: 'Unauthorized',
+				error: 'Unauthorized',
+			};
 		}
 
 		// Only SUPER_ADMIN can create other SUPER_ADMINs
 		if (data.role === 'SUPER_ADMIN' && admin.role !== 'SUPER_ADMIN') {
 			return {
 				success: false,
+				message: 'Only super admins can create super admin accounts',
 				error: 'Only super admins can create super admin accounts',
 			};
 		}
@@ -777,11 +787,15 @@ export async function createStaff(data: {
 		});
 
 		if (existingUser) {
-			return { success: false, error: 'Email already in use' };
+			return {
+				success: false,
+				message: 'Email already in use',
+				error: 'Email already in use',
+			};
 		}
 
 		// Hash password
-		const hashedPassword = await bcrypt.hash(data.password, 12);
+		const hashedPassword = await hash(data.password, 12);
 
 		// Create staff user
 		const staff = await prisma.user.create({
@@ -799,9 +813,14 @@ export async function createStaff(data: {
 			data: {
 				userId: admin.id,
 				action: 'CREATE_STAFF',
-				details: `Created ${data.role.toLowerCase()} account for ${
-					data.name
-				}`,
+				entityType: 'User',
+				entityId: staff.id,
+				metadata: {
+					details: `Created ${data.role.toLowerCase()} account for ${
+						data.name
+					}`,
+					role: data.role,
+				},
 			},
 		});
 
@@ -816,7 +835,7 @@ export async function createStaff(data: {
 		console.error('Create staff error:', error);
 		return {
 			success: false,
-			error:
+			message:
 				error instanceof Error
 					? error.message
 					: 'Failed to create staff',

@@ -61,12 +61,15 @@ import {
 	X,
 	Check,
 	Blocks,
+	Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import {
 	createShopCategory,
 	createShopItem,
+	updateShopItem,
+	updateShopItemComponents,
 	updateShopOrderStatus,
 	type ShopItemWithRelations,
 	type ShopOrderWithItems,
@@ -136,6 +139,14 @@ export function AdminShopClient({
 	const [showAddCategory, setShowAddCategory] = useState(false);
 	const [isComposite, setIsComposite] = useState(false);
 	const [components, setComponents] = useState<
+		Array<{ inventoryItemId: string; quantity: number }>
+	>([]);
+
+	// Edit item state
+	const [showEditItem, setShowEditItem] = useState(false);
+	const [editingItem, setEditingItem] =
+		useState<ShopItemWithRelations | null>(null);
+	const [editComponents, setEditComponents] = useState<
 		Array<{ inventoryItemId: string; quantity: number }>
 	>([]);
 
@@ -241,6 +252,97 @@ export function AdminShopClient({
 			} else {
 				toast.error(result.error || 'Failed to update order');
 			}
+		});
+	};
+
+	// Open edit dialog for item
+	const openEditItem = (item: ShopItemWithRelations) => {
+		setEditingItem(item);
+		// Populate edit components from existing item components
+		if (item.isComposite && item.components) {
+			setEditComponents(
+				item.components.map((c) => ({
+					inventoryItemId: c.inventoryItemId,
+					quantity: c.quantity,
+				}))
+			);
+		} else {
+			setEditComponents([]);
+		}
+		setShowEditItem(true);
+	};
+
+	// Edit component handlers
+	const addEditComponent = () => {
+		setEditComponents([
+			...editComponents,
+			{ inventoryItemId: '', quantity: 1 },
+		]);
+	};
+
+	const removeEditComponent = (index: number) => {
+		setEditComponents(editComponents.filter((_, i) => i !== index));
+	};
+
+	const updateEditComponent = (
+		index: number,
+		field: 'inventoryItemId' | 'quantity',
+		value: string | number
+	) => {
+		const updated = [...editComponents];
+		updated[index] = { ...updated[index], [field]: value };
+		setEditComponents(updated);
+	};
+
+	// Update Item Form
+	const handleUpdateItem = async (e: React.FormEvent<HTMLFormElement>) => {
+		e.preventDefault();
+		if (!editingItem) return;
+
+		const formData = new FormData(e.currentTarget);
+
+		startTransition(async () => {
+			// Update basic item details
+			const result = await updateShopItem(editingItem.id, {
+				categoryId: formData.get('categoryId') as string,
+				name: formData.get('name') as string,
+				description:
+					(formData.get('description') as string) || undefined,
+				price: Math.round(
+					parseFloat(formData.get('price') as string) * 100
+				),
+				preparationTime:
+					parseInt(formData.get('preparationTime') as string) || 0,
+				isActive: formData.get('isActive') === 'true',
+			});
+
+			if (!result.success) {
+				toast.error(result.error || 'Failed to update item');
+				return;
+			}
+
+			// Update components if composite item
+			if (editingItem.isComposite) {
+				const validComponents = editComponents.filter(
+					(c) => c.inventoryItemId && c.quantity > 0
+				);
+				const componentsResult = await updateShopItemComponents(
+					editingItem.id,
+					validComponents
+				);
+
+				if (!componentsResult.success) {
+					toast.error(
+						componentsResult.error || 'Failed to update components'
+					);
+					return;
+				}
+			}
+
+			toast.success('Item updated successfully');
+			setShowEditItem(false);
+			setEditingItem(null);
+			setEditComponents([]);
 		});
 	};
 
@@ -431,6 +533,7 @@ export function AdminShopClient({
 
 											<div className='flex items-center gap-2 p-3 bg-muted rounded-lg'>
 												<input
+													title='item'
 													type='checkbox'
 													id='isComposite'
 													checked={isComposite}
@@ -556,6 +659,7 @@ export function AdminShopClient({
 																								{
 																									item.baseUnit
 																								}
+
 																								s
 																								available)
 																							</SelectItem>
@@ -664,6 +768,312 @@ export function AdminShopClient({
 													<Loader2 className='mr-2 h-4 w-4 animate-spin' />
 												)}
 												Create Item
+											</Button>
+										</DialogFooter>
+									</form>
+								</DialogContent>
+							</Dialog>
+
+							{/* Edit Item Dialog */}
+							<Dialog
+								open={showEditItem}
+								onOpenChange={(open) => {
+									setShowEditItem(open);
+									if (!open) {
+										setEditingItem(null);
+										setEditComponents([]);
+									}
+								}}
+							>
+								<DialogContent
+									className={
+										editingItem?.isComposite
+											? 'max-w-2xl max-h-[90vh] overflow-y-auto'
+											: 'max-w-lg'
+									}
+								>
+									<form onSubmit={handleUpdateItem}>
+										<DialogHeader>
+											<DialogTitle>
+												Edit Shop Item
+											</DialogTitle>
+											<DialogDescription>
+												Update the shop item details
+											</DialogDescription>
+										</DialogHeader>
+										<div className='space-y-4 py-4'>
+											<div className='space-y-2'>
+												<Label htmlFor='edit-categoryId'>
+													Category
+												</Label>
+												<Select
+													name='categoryId'
+													defaultValue={
+														editingItem?.categoryId
+													}
+												>
+													<SelectTrigger id='edit-categoryId'>
+														<SelectValue placeholder='Select category' />
+													</SelectTrigger>
+													<SelectContent>
+														{categories.map(
+															(cat) => (
+																<SelectItem
+																	key={cat.id}
+																	value={
+																		cat.id
+																	}
+																>
+																	{cat.name}
+																</SelectItem>
+															)
+														)}
+													</SelectContent>
+												</Select>
+											</div>
+											<div className='space-y-2'>
+												<Label htmlFor='edit-name'>
+													Item Name
+												</Label>
+												<Input
+													id='edit-name'
+													name='name'
+													defaultValue={
+														editingItem?.name
+													}
+													placeholder='e.g., Cappuccino, Croissant'
+													required
+												/>
+											</div>
+											<div className='space-y-2'>
+												<Label htmlFor='edit-description'>
+													Description
+												</Label>
+												<Textarea
+													id='edit-description'
+													name='description'
+													defaultValue={
+														editingItem?.description ||
+														''
+													}
+													placeholder='Item description...'
+												/>
+											</div>
+											<div className='grid grid-cols-2 gap-4'>
+												<div className='space-y-2'>
+													<Label htmlFor='edit-price'>
+														Price (₦)
+													</Label>
+													<Input
+														id='edit-price'
+														name='price'
+														type='number'
+														step='0.01'
+														min='0'
+														defaultValue={
+															editingItem
+																? (
+																		editingItem.price /
+																		100
+																  ).toFixed(2)
+																: ''
+														}
+														required
+													/>
+												</div>
+												<div className='space-y-2'>
+													<Label htmlFor='edit-preparationTime'>
+														Prep Time (min)
+													</Label>
+													<Input
+														id='edit-preparationTime'
+														name='preparationTime'
+														type='number'
+														min='0'
+														defaultValue={
+															editingItem?.preparationTime ||
+															0
+														}
+													/>
+												</div>
+											</div>
+											<div className='space-y-2'>
+												<Label htmlFor='edit-isActive'>
+													Status
+												</Label>
+												<Select
+													name='isActive'
+													defaultValue={
+														editingItem?.isActive
+															? 'true'
+															: 'false'
+													}
+												>
+													<SelectTrigger id='edit-isActive'>
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value='true'>
+															Active
+														</SelectItem>
+														<SelectItem value='false'>
+															Inactive
+														</SelectItem>
+													</SelectContent>
+												</Select>
+											</div>
+
+											{/* Composite Item Components */}
+											{editingItem?.isComposite && (
+												<div className='space-y-3 border-t pt-4'>
+													<div className='flex items-center justify-between'>
+														<Label className='flex items-center gap-2'>
+															<Blocks className='h-4 w-4' />
+															Recipe Components
+														</Label>
+														<Button
+															type='button'
+															variant='outline'
+															size='sm'
+															onClick={
+																addEditComponent
+															}
+														>
+															<Plus className='h-4 w-4 mr-1' />
+															Add
+														</Button>
+													</div>
+													{editComponents.length ===
+													0 ? (
+														<p className='text-sm text-muted-foreground text-center py-2'>
+															No components added
+															yet
+														</p>
+													) : (
+														<div className='space-y-2'>
+															{editComponents.map(
+																(
+																	comp,
+																	index
+																) => (
+																	<div
+																		key={
+																			index
+																		}
+																		className='flex items-center gap-2'
+																	>
+																		<Select
+																			value={
+																				comp.inventoryItemId
+																			}
+																			onValueChange={(
+																				val
+																			) =>
+																				updateEditComponent(
+																					index,
+																					'inventoryItemId',
+																					val
+																				)
+																			}
+																		>
+																			<SelectTrigger className='flex-1'>
+																				<SelectValue placeholder='Select item' />
+																			</SelectTrigger>
+																			<SelectContent>
+																				{inventoryItems.map(
+																					(
+																						item
+																					) => (
+																						<SelectItem
+																							key={
+																								item.id
+																							}
+																							value={
+																								item.id
+																							}
+																						>
+																							{
+																								item.name
+																							}{' '}
+																							(
+																							{
+																								item.currentStock
+																							}{' '}
+																							{
+																								item.baseUnit
+																							}
+																							s
+																							available)
+																						</SelectItem>
+																					)
+																				)}
+																			</SelectContent>
+																		</Select>
+																		<Input
+																			type='number'
+																			min='1'
+																			value={
+																				comp.quantity
+																			}
+																			onChange={(
+																				e
+																			) =>
+																				updateEditComponent(
+																					index,
+																					'quantity',
+																					parseInt(
+																						e
+																							.target
+																							.value
+																					) ||
+																						1
+																				)
+																			}
+																			className='w-20'
+																		/>
+																		<span className='text-sm text-muted-foreground'>
+																			units
+																		</span>
+																		<Button
+																			type='button'
+																			variant='ghost'
+																			size='sm'
+																			onClick={() =>
+																				removeEditComponent(
+																					index
+																				)
+																			}
+																		>
+																			<X className='h-4 w-4' />
+																		</Button>
+																	</div>
+																)
+															)}
+														</div>
+													)}
+												</div>
+											)}
+										</div>
+										<DialogFooter>
+											<Button
+												type='button'
+												variant='outline'
+												onClick={() => {
+													setShowEditItem(false);
+													setEditingItem(null);
+													setEditComponents([]);
+												}}
+											>
+												Cancel
+											</Button>
+											<Button
+												type='submit'
+												disabled={isPending}
+											>
+												{isPending && (
+													<Loader2 className='mr-2 h-4 w-4 animate-spin' />
+												)}
+												Save Changes
 											</Button>
 										</DialogFooter>
 									</form>
@@ -1099,7 +1509,7 @@ export function AdminShopClient({
 											<Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
 											<Input
 												placeholder='Search items...'
-												className='pl-9 w-[200px]'
+												className='pl-9 w-50'
 												value={searchTerm}
 												onChange={(e) =>
 													setSearchTerm(
@@ -1112,7 +1522,7 @@ export function AdminShopClient({
 											value={categoryFilter}
 											onValueChange={setCategoryFilter}
 										>
-											<SelectTrigger className='w-[150px]'>
+											<SelectTrigger className='w-37.5'>
 												<SelectValue placeholder='Category' />
 											</SelectTrigger>
 											<SelectContent>
@@ -1142,13 +1552,16 @@ export function AdminShopClient({
 											<TableHead>Price</TableHead>
 											<TableHead>Status</TableHead>
 											<TableHead>Stock</TableHead>
+											<TableHead className='w-20'>
+												Actions
+											</TableHead>
 										</TableRow>
 									</TableHeader>
 									<TableBody>
 										{filteredItems.length === 0 ? (
 											<TableRow>
 												<TableCell
-													colSpan={6}
+													colSpan={7}
 													className='text-center py-8 text-muted-foreground'
 												>
 													No items found
@@ -1241,6 +1654,22 @@ export function AdminShopClient({
 																N/A
 															</span>
 														)}
+													</TableCell>
+													<TableCell>
+														<Button
+															variant='ghost'
+															size='icon'
+															onClick={() =>
+																openEditItem(
+																	item
+																)
+															}
+														>
+															<Pencil className='h-4 w-4' />
+															<span className='sr-only'>
+																Edit item
+															</span>
+														</Button>
 													</TableCell>
 												</TableRow>
 											))

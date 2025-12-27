@@ -93,6 +93,7 @@ export default function SpaceDetailsClient({ space }: SpaceDetailsClientProps) {
 			spaceName: space.name,
 			planId: plan.id,
 			planName: plan.name,
+			unit: plan.unit,
 			amount: plan.price / 100, // Convert kobo to naira for display
 			capacity: space.capacity,
 			amenities: space.amenities || [],
@@ -114,6 +115,11 @@ export default function SpaceDetailsClient({ space }: SpaceDetailsClientProps) {
 
 		const plan = space.pricingPlans[0];
 
+		// Calculate end time (1 hour after start)
+		const [hours, minutes] = selectedSlot.split(':').map(Number);
+		const endHour = String(hours + 1).padStart(2, '0');
+		const endTime = `${endHour}:${String(minutes).padStart(2, '0')}`;
+
 		// Set booking data in store
 		setBookingData({
 			type: 'booking',
@@ -123,6 +129,7 @@ export default function SpaceDetailsClient({ space }: SpaceDetailsClientProps) {
 			planName: plan.name,
 			date: selectedDate.toISOString(),
 			startTime: selectedSlot,
+			endTime: endTime,
 			duration: 1,
 			unit: plan.unit,
 			attendees: 1,
@@ -139,7 +146,10 @@ export default function SpaceDetailsClient({ space }: SpaceDetailsClientProps) {
 			{/* Back Button */}
 			<section className='px-4 py-4 border-b'>
 				<div className='container mx-auto'>
-					<Button variant='ghost' asChild>
+					<Button
+						variant='ghost'
+						asChild
+					>
 						<Link href='/spaces'>
 							<ArrowLeft className='mr-2 h-4 w-4' />
 							Back to Spaces
@@ -485,9 +495,7 @@ export default function SpaceDetailsClient({ space }: SpaceDetailsClientProps) {
 									asChild
 									className='border-secondary text-secondary hover:bg-secondary/10 bg-transparent'
 								>
-									<Link href='/enquiry'>
-										Make an Enquiry
-									</Link>
+									<Link href='/enquiry'>Make an Enquiry</Link>
 								</Button>
 							</div>
 						</CardContent>
@@ -496,7 +504,10 @@ export default function SpaceDetailsClient({ space }: SpaceDetailsClientProps) {
 			</section>
 
 			{/* Login Required Dialog */}
-			<Dialog open={showLoginDialog} onOpenChange={setShowLoginDialog}>
+			<Dialog
+				open={showLoginDialog}
+				onOpenChange={setShowLoginDialog}
+			>
 				<DialogContent className='sm:max-w-[400px]'>
 					<DialogHeader>
 						<DialogTitle className='flex items-center gap-2'>
@@ -522,15 +533,22 @@ export default function SpaceDetailsClient({ space }: SpaceDetailsClientProps) {
 						<div className='flex flex-col gap-3'>
 							<Button asChild>
 								<Link
-									href={`/login?redirect=/spaces/${space.slug || space.id}`}
+									href={`/login?redirect=/spaces/${
+										space.slug || space.id
+									}`}
 								>
 									<LogIn className='mr-2 h-4 w-4' />
 									Sign In
 								</Link>
 							</Button>
-							<Button variant='outline' asChild>
+							<Button
+								variant='outline'
+								asChild
+							>
 								<Link
-									href={`/register?redirect=/spaces/${space.slug || space.id}`}
+									href={`/register?redirect=/spaces/${
+										space.slug || space.id
+									}`}
 								>
 									Create Account
 								</Link>

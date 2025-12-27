@@ -21,7 +21,13 @@ export default async function AdminTeamPage({ params }: PageProps) {
 		notFound();
 	}
 
-	const subscription = result.data;
+	// Handle union type - getSubscriptionById returns single object, not array
+	const subscription = Array.isArray(result.data)
+		? result.data[0]
+		: result.data;
+	if (!subscription) {
+		notFound();
+	}
 
 	// Verify user ID matches
 	if (subscription.user.id !== id) {
