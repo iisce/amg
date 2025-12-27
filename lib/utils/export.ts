@@ -1,5 +1,3 @@
-'use server';
-
 import { formatNaira, koboToNaira } from './format';
 
 // ============================================
@@ -202,6 +200,73 @@ export const EARLY_BIRD_COLUMNS = [
 		label: 'Max Lead Time (Days)',
 		format: formatNumber,
 	},
+];
+
+export const POPULAR_MEMBERSHIP_PLANS_COLUMNS = [
+	{ key: 'rank' as const, label: 'Rank' },
+	{ key: 'name' as const, label: 'Plan Name' },
+	{ key: 'spaceName' as const, label: 'Space' },
+	{ key: 'billingCycle' as const, label: 'Billing Cycle' },
+	{
+		key: 'subscriberCount' as const,
+		label: 'Subscribers',
+		format: formatNumber,
+	},
+	{
+		key: 'totalRevenue' as const,
+		label: 'Total Revenue',
+		format: formatMoney,
+	},
+	{
+		key: 'renewalRate' as const,
+		label: 'Renewal Rate',
+		format: formatPercent,
+	},
+];
+
+export const REPEAT_VISITORS_COLUMNS = [
+	{ key: 'rank' as const, label: 'Rank' },
+	{ key: 'name' as const, label: 'Visitor Name' },
+	{ key: 'email' as const, label: 'Email' },
+	{ key: 'company' as const, label: 'Company' },
+	{ key: 'visitCount' as const, label: 'Total Visits', format: formatNumber },
+	{
+		key: 'totalDuration' as const,
+		label: 'Total Duration (min)',
+		format: formatNumber,
+	},
+	{ key: 'lastVisit' as const, label: 'Last Visit', format: formatDate },
+];
+
+export const CHECKIN_SUMMARY_COLUMNS = [
+	{ key: 'date' as const, label: 'Date', format: formatDate },
+	{ key: 'total' as const, label: 'Total Check-ins', format: formatNumber },
+	{
+		key: 'bookings' as const,
+		label: 'Booking Check-ins',
+		format: formatNumber,
+	},
+	{
+		key: 'memberships' as const,
+		label: 'Membership Check-ins',
+		format: formatNumber,
+	},
+	{
+		key: 'visitors' as const,
+		label: 'Visitor Check-ins',
+		format: formatNumber,
+	},
+	{ key: 'onTime' as const, label: 'On-Time', format: formatNumber },
+	{ key: 'late' as const, label: 'Late', format: formatNumber },
+	{ key: 'early' as const, label: 'Early', format: formatNumber },
+];
+
+export const VISITOR_TRENDS_COLUMNS = [
+	{ key: 'date' as const, label: 'Date', format: formatDate },
+	{ key: 'total' as const, label: 'Total Visitors', format: formatNumber },
+	{ key: 'checkedIn' as const, label: 'Checked In', format: formatNumber },
+	{ key: 'checkedOut' as const, label: 'Checked Out', format: formatNumber },
+	{ key: 'pending' as const, label: 'Pending', format: formatNumber },
 ];
 
 // ============================================

@@ -12,6 +12,14 @@ import {
 	getReportSpaceUtilization,
 	getClientLeaderboard,
 	getEarlyBirdClients,
+	getPopularMembershipPlans,
+	getVisitorOverview,
+	getVisitorTrends,
+	getRepeatVisitors,
+	getCheckInOverview,
+	getCheckInTrends,
+	getBookingTrends,
+	getPeakBookingHours,
 	type TimeFrame,
 } from '@/actions/reports';
 import AdminReportsClient from './admin-reports-client';
@@ -54,6 +62,14 @@ export default async function AdminReportsPage({
 		spaceUtilization,
 		leaderboard,
 		earlyBirds,
+		popularMembershipPlans,
+		visitorOverview,
+		visitorTrends,
+		repeatVisitors,
+		checkInOverview,
+		checkInTrends,
+		bookingTrends,
+		peakHours,
 	] = await Promise.all([
 		getRevenueOverview(timeFrame, customRange),
 		getRevenueTrends(timeFrame, customRange),
@@ -66,6 +82,14 @@ export default async function AdminReportsPage({
 		getReportSpaceUtilization(timeFrame, customRange),
 		getClientLeaderboard(timeFrame, customRange, 10),
 		getEarlyBirdClients(timeFrame, customRange, 10),
+		getPopularMembershipPlans(timeFrame, customRange, 10),
+		getVisitorOverview(timeFrame, customRange),
+		getVisitorTrends(timeFrame, customRange),
+		getRepeatVisitors(timeFrame, customRange, 10),
+		getCheckInOverview(timeFrame, customRange),
+		getCheckInTrends(timeFrame, customRange),
+		getBookingTrends(timeFrame, customRange),
+		getPeakBookingHours(timeFrame, customRange),
 	]);
 
 	return (
@@ -85,6 +109,14 @@ export default async function AdminReportsPage({
 			spaceUtilization={spaceUtilization.data || []}
 			leaderboard={leaderboard.data || null}
 			earlyBirds={earlyBirds.data || []}
+			popularMembershipPlans={popularMembershipPlans.data || []}
+			visitorOverview={visitorOverview.data || null}
+			visitorTrends={visitorTrends.data || []}
+			repeatVisitors={repeatVisitors.data || []}
+			checkInOverview={checkInOverview.data || null}
+			checkInTrends={checkInTrends.data || []}
+			bookingTrends={bookingTrends.data || []}
+			peakHours={peakHours.data || []}
 		/>
 	);
 }

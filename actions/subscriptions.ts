@@ -16,6 +16,7 @@ import {
 	createSubscriptionRenewalEmail,
 	createSubscriptionCancellationEmail,
 	createSubscriptionPausedEmail,
+	createSubscriptionResumedEmail,
 } from '@/lib/email-templates';
 
 // ============================================
@@ -726,6 +727,61 @@ export async function pauseSubscription(
 		return {
 			success: false,
 			message: 'Failed to pause subscription',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+export async function resumeSubscription(
+	id: string
+): Promise<SubscriptionResult> {
+	try {
+		const membership = await prisma.membership.findUnique({
+			where: { id },
+		});
+
+		if (!membership) {
+			return {
+				success: false,
+				message: 'Subscription not found',
+			};
+		}
+
+		if (
+			membership.status !== 'PAUSED' &&
+			membership.status !== 'SUSPENDED'
+		) {
+			return {
+				success: false,
+				message:
+					'Only paused or suspended subscriptions can be resumed',
+			};
+		}
+
+		const result = await updateSubscriptionStatus(id, 'ACTIVE');
+
+		// Send resume notification email if successful
+		if (result.success && result.data) {
+			const membershipData = Array.isArray(result.data)
+				? result.data[0]
+				: result.data;
+			if (membershipData) {
+				const resumeEmail =
+					createSubscriptionResumedEmail(membershipData);
+				await sendEmail({
+					to: membershipData.user.email,
+					subject: resumeEmail.subject,
+					html: resumeEmail.html,
+				});
+			}
+		}
+
+		return result;
+	} catch (error) {
+		console.error('Resume subscription error:', error);
+		return {
+			success: false,
+			message: 'Failed to resume subscription',
 			error: error instanceof Error ? error.message : 'Unknown error',
 		};
 	}

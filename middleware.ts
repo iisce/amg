@@ -36,6 +36,7 @@ export default auth((req) => {
 		'/admin/spaces',
 		'/admin/bookings',
 		'/admin/members',
+		'/admin/memberships',
 		'/admin/reports',
 		'/admin/scanner',
 	];

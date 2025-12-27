@@ -35,6 +35,7 @@ import {
 	TableHeader,
 	TableRow,
 } from '@/components/ui/table';
+import { Progress } from '@/components/ui/progress';
 import {
 	Download,
 	TrendingUp,
@@ -63,6 +64,15 @@ import {
 	Award,
 	Star,
 	FileSpreadsheet,
+	UserCheck,
+	UserX,
+	UsersRound,
+	LogIn,
+	CheckCircle2,
+	XCircle,
+	AlertCircle,
+	Repeat,
+	Timer,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import type {
@@ -78,6 +88,14 @@ import type {
 	ReportSpaceUtilization,
 	LeaderboardEntry,
 	EarlyBirdClient,
+	PopularMembershipPlan,
+	VisitorOverview,
+	VisitorTrend,
+	RepeatVisitor,
+	CheckInOverview,
+	CheckInTrend,
+	BookingTrend,
+	PeakHour,
 } from '@/actions/reports';
 import {
 	generateCSV,
@@ -87,6 +105,10 @@ import {
 	TOP_SHOP_ITEMS_COLUMNS,
 	SPACE_UTILIZATION_COLUMNS,
 	EARLY_BIRD_COLUMNS,
+	POPULAR_MEMBERSHIP_PLANS_COLUMNS,
+	REPEAT_VISITORS_COLUMNS,
+	CHECKIN_SUMMARY_COLUMNS,
+	VISITOR_TRENDS_COLUMNS,
 	getExportFilename,
 	getExportMimeType,
 } from '@/lib/utils/export';
@@ -123,6 +145,14 @@ interface AdminReportsClientProps {
 		byLoyalty: LeaderboardEntry[];
 	} | null;
 	earlyBirds: EarlyBirdClient[];
+	popularMembershipPlans: PopularMembershipPlan[];
+	visitorOverview: VisitorOverview | null;
+	visitorTrends: VisitorTrend[];
+	repeatVisitors: RepeatVisitor[];
+	checkInOverview: CheckInOverview | null;
+	checkInTrends: CheckInTrend[];
+	bookingTrends: BookingTrend[];
+	peakHours: PeakHour[];
 }
 
 // ============================================
@@ -179,6 +209,14 @@ export default function AdminReportsClient({
 	spaceUtilization,
 	leaderboard,
 	earlyBirds,
+	popularMembershipPlans,
+	visitorOverview,
+	visitorTrends,
+	repeatVisitors,
+	checkInOverview,
+	checkInTrends,
+	bookingTrends,
+	peakHours,
 }: AdminReportsClientProps) {
 	const router = useRouter();
 	const searchParams = useSearchParams();
@@ -297,6 +335,80 @@ export default function AdminReportsClient({
 		downloadFile(
 			content,
 			getExportFilename('early-birds', format),
+			getExportMimeType(format)
+		);
+	};
+
+	const exportPopularMembershipPlans = (format: 'csv' | 'excel') => {
+		const dataWithRank = popularMembershipPlans.map((p, i) => ({
+			...p,
+			rank: i + 1,
+		}));
+		const content =
+			format === 'excel'
+				? generateExcelCSV(
+						dataWithRank,
+						POPULAR_MEMBERSHIP_PLANS_COLUMNS as any
+				  )
+				: generateCSV(
+						dataWithRank,
+						POPULAR_MEMBERSHIP_PLANS_COLUMNS as any
+				  );
+		downloadFile(
+			content,
+			getExportFilename('popular-membership-plans', format),
+			getExportMimeType(format)
+		);
+	};
+
+	const exportRepeatVisitors = (format: 'csv' | 'excel') => {
+		const dataWithRank = repeatVisitors.map((v, i) => ({
+			...v,
+			rank: i + 1,
+		}));
+		const content =
+			format === 'excel'
+				? generateExcelCSV(dataWithRank, REPEAT_VISITORS_COLUMNS as any)
+				: generateCSV(dataWithRank, REPEAT_VISITORS_COLUMNS as any);
+		downloadFile(
+			content,
+			getExportFilename('repeat-visitors', format),
+			getExportMimeType(format)
+		);
+	};
+
+	const exportCheckInTrends = (format: 'csv' | 'excel') => {
+		const content =
+			format === 'excel'
+				? generateExcelCSV(
+						checkInTrends as unknown as Record<string, unknown>[],
+						CHECKIN_SUMMARY_COLUMNS as any
+				  )
+				: generateCSV(
+						checkInTrends as unknown as Record<string, unknown>[],
+						CHECKIN_SUMMARY_COLUMNS as any
+				  );
+		downloadFile(
+			content,
+			getExportFilename('checkin-trends', format),
+			getExportMimeType(format)
+		);
+	};
+
+	const exportVisitorTrends = (format: 'csv' | 'excel') => {
+		const content =
+			format === 'excel'
+				? generateExcelCSV(
+						visitorTrends as unknown as Record<string, unknown>[],
+						VISITOR_TRENDS_COLUMNS as any
+				  )
+				: generateCSV(
+						visitorTrends as unknown as Record<string, unknown>[],
+						VISITOR_TRENDS_COLUMNS as any
+				  );
+		downloadFile(
+			content,
+			getExportFilename('visitor-trends', format),
 			getExportMimeType(format)
 		);
 	};
@@ -482,6 +594,13 @@ export default function AdminReportsClient({
 								Bookings
 							</TabsTrigger>
 							<TabsTrigger
+								value='memberships'
+								className='gap-2'
+							>
+								<UserCog className='h-4 w-4' />
+								Memberships
+							</TabsTrigger>
+							<TabsTrigger
 								value='spaces'
 								className='gap-2'
 							>
@@ -494,6 +613,20 @@ export default function AdminReportsClient({
 							>
 								<ShoppingCart className='h-4 w-4' />
 								Shop
+							</TabsTrigger>
+							<TabsTrigger
+								value='visitors'
+								className='gap-2'
+							>
+								<UsersRound className='h-4 w-4' />
+								Visitors
+							</TabsTrigger>
+							<TabsTrigger
+								value='checkins'
+								className='gap-2'
+							>
+								<LogIn className='h-4 w-4' />
+								Check-ins
 							</TabsTrigger>
 							<TabsTrigger
 								value='leaderboard'
@@ -1405,6 +1538,122 @@ export default function AdminReportsClient({
 									)}
 								</CardContent>
 							</Card>
+
+							{/* Peak Booking Hours */}
+							<Card>
+								<CardHeader>
+									<CardTitle>⏰ Peak Booking Hours</CardTitle>
+									<CardDescription>
+										When spaces are most frequently booked
+									</CardDescription>
+								</CardHeader>
+								<CardContent>
+									{peakHours.length > 0 ? (
+										<div className='space-y-3'>
+											{peakHours.map((peak) => {
+												const maxBookings = Math.max(
+													...peakHours.map(
+														(p) => p.bookingCount
+													)
+												);
+												const percentage =
+													maxBookings > 0
+														? (peak.bookingCount /
+																maxBookings) *
+														  100
+														: 0;
+												return (
+													<div
+														key={peak.hour}
+														className='flex items-center gap-3'
+													>
+														<span className='w-16 text-sm text-muted-foreground'>
+															{peak.label}
+														</span>
+														<div className='flex-1'>
+															<Progress
+																value={
+																	percentage
+																}
+																className='h-6'
+															/>
+														</div>
+														<span className='w-20 text-sm text-right font-medium'>
+															{peak.bookingCount}
+														</span>
+													</div>
+												);
+											})}
+										</div>
+									) : (
+										<p className='text-sm text-muted-foreground text-center py-8'>
+											No peak hour data for this period
+										</p>
+									)}
+								</CardContent>
+							</Card>
+
+							{/* Booking Trends */}
+							<Card>
+								<CardHeader>
+									<CardTitle>📈 Booking Trends</CardTitle>
+									<CardDescription>
+										Daily booking activity
+									</CardDescription>
+								</CardHeader>
+								<CardContent>
+									{bookingTrends.length > 0 ? (
+										<div className='space-y-2'>
+											{bookingTrends
+												.slice(-14)
+												.map((trend) => (
+													<div
+														key={trend.date}
+														className='flex items-center justify-between border-b pb-2 last:border-0'
+													>
+														<span className='text-sm'>
+															{format(
+																new Date(
+																	trend.date
+																),
+																'EEE, MMM dd'
+															)}
+														</span>
+														<div className='flex items-center gap-4'>
+															<span className='text-xs text-blue-600'>
+																Confirmed:{' '}
+																{
+																	trend.confirmed
+																}
+															</span>
+															<span className='text-xs text-green-600'>
+																Completed:{' '}
+																{
+																	trend.completed
+																}
+															</span>
+															<span className='text-xs text-red-600'>
+																Cancelled:{' '}
+																{
+																	trend.cancelled
+																}
+															</span>
+															<span className='font-medium'>
+																Total:{' '}
+																{trend.total}
+															</span>
+														</div>
+													</div>
+												))}
+										</div>
+									) : (
+										<p className='text-sm text-muted-foreground text-center py-8'>
+											No booking trend data for this
+											period
+										</p>
+									)}
+								</CardContent>
+							</Card>
 						</TabsContent>
 
 						{/* SPACES TAB */}
@@ -1685,6 +1934,828 @@ export default function AdminReportsClient({
 									) : (
 										<p className='text-sm text-muted-foreground text-center py-8'>
 											No shop data for this period
+										</p>
+									)}
+								</CardContent>
+							</Card>
+						</TabsContent>
+
+						{/* MEMBERSHIPS TAB */}
+						<TabsContent
+							value='memberships'
+							className='space-y-6'
+						>
+							<div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Active Memberships
+										</CardTitle>
+										<UserCheck className='h-4 w-4 text-green-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{membershipOverview?.activeMemberships ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Expired
+										</CardTitle>
+										<UserX className='h-4 w-4 text-orange-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{membershipOverview?.expiredMemberships ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Renewal Rate
+										</CardTitle>
+										<Repeat className='h-4 w-4 text-blue-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{membershipOverview?.renewalRate ||
+												0}
+											%
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Upcoming Renewals
+										</CardTitle>
+										<Timer className='h-4 w-4 text-purple-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{membershipOverview?.upcomingRenewals ||
+												0}
+										</div>
+										<p className='text-xs text-muted-foreground'>
+											Next 30 days
+										</p>
+									</CardContent>
+								</Card>
+							</div>
+
+							{/* Additional Stats */}
+							<div className='grid gap-4 md:grid-cols-3'>
+								<Card>
+									<CardHeader className='pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Total Membership Value
+										</CardTitle>
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{formatMoney(
+												membershipOverview?.totalValue ||
+													0
+											)}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Cancelled
+										</CardTitle>
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold text-red-500'>
+											{membershipOverview?.cancelledMemberships ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Avg Duration
+										</CardTitle>
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{membershipOverview?.averageMembershipDuration ||
+												0}{' '}
+											days
+										</div>
+									</CardContent>
+								</Card>
+							</div>
+
+							{/* Popular Membership Plans */}
+							<Card>
+								<CardHeader className='flex flex-row items-center justify-between'>
+									<div>
+										<CardTitle>
+											Popular Membership Plans
+										</CardTitle>
+										<CardDescription>
+											Most subscribed plans this period
+										</CardDescription>
+									</div>
+									<div className='flex gap-2'>
+										<Button
+											variant='outline'
+											size='sm'
+											onClick={() =>
+												exportPopularMembershipPlans(
+													'csv'
+												)
+											}
+										>
+											<Download className='mr-2 h-4 w-4' />
+											CSV
+										</Button>
+										<Button
+											variant='outline'
+											size='sm'
+											onClick={() =>
+												exportPopularMembershipPlans(
+													'excel'
+												)
+											}
+										>
+											<FileSpreadsheet className='mr-2 h-4 w-4' />
+											Excel
+										</Button>
+									</div>
+								</CardHeader>
+								<CardContent>
+									{popularMembershipPlans.length > 0 ? (
+										<Table>
+											<TableHeader>
+												<TableRow>
+													<TableHead className='w-12'>
+														#
+													</TableHead>
+													<TableHead>Plan</TableHead>
+													<TableHead>Space</TableHead>
+													<TableHead>Cycle</TableHead>
+													<TableHead className='text-right'>
+														Subscribers
+													</TableHead>
+													<TableHead className='text-right'>
+														Revenue
+													</TableHead>
+													<TableHead className='text-right'>
+														Renewal Rate
+													</TableHead>
+												</TableRow>
+											</TableHeader>
+											<TableBody>
+												{popularMembershipPlans.map(
+													(plan, i) => (
+														<TableRow key={plan.id}>
+															<TableCell>
+																{i === 0 && (
+																	<Crown className='h-5 w-5 text-yellow-500' />
+																)}
+																{i > 0 && (
+																	<span className='text-muted-foreground'>
+																		{i + 1}
+																	</span>
+																)}
+															</TableCell>
+															<TableCell className='font-medium'>
+																{plan.name}
+															</TableCell>
+															<TableCell>
+																{plan.spaceName}
+															</TableCell>
+															<TableCell>
+																<Badge variant='outline'>
+																	{
+																		plan.billingCycle
+																	}
+																</Badge>
+															</TableCell>
+															<TableCell className='text-right'>
+																{
+																	plan.subscriberCount
+																}
+															</TableCell>
+															<TableCell className='text-right font-medium'>
+																{formatMoney(
+																	plan.totalRevenue
+																)}
+															</TableCell>
+															<TableCell className='text-right'>
+																<Badge
+																	variant={
+																		plan.renewalRate >
+																		70
+																			? 'default'
+																			: 'secondary'
+																	}
+																>
+																	{
+																		plan.renewalRate
+																	}
+																	%
+																</Badge>
+															</TableCell>
+														</TableRow>
+													)
+												)}
+											</TableBody>
+										</Table>
+									) : (
+										<p className='text-sm text-muted-foreground text-center py-8'>
+											No membership plan data for this
+											period
+										</p>
+									)}
+								</CardContent>
+							</Card>
+						</TabsContent>
+
+						{/* VISITORS TAB */}
+						<TabsContent
+							value='visitors'
+							className='space-y-6'
+						>
+							<div className='grid gap-4 md:grid-cols-2 lg:grid-cols-5'>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Total Visitors
+										</CardTitle>
+										<UsersRound className='h-4 w-4 text-muted-foreground' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{visitorOverview?.totalVisitors ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Checked In
+										</CardTitle>
+										<UserCheck className='h-4 w-4 text-green-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold text-green-500'>
+											{visitorOverview?.checkedInVisitors ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Checked Out
+										</CardTitle>
+										<LogIn className='h-4 w-4 text-blue-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{visitorOverview?.checkedOutVisitors ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Pending
+										</CardTitle>
+										<Clock className='h-4 w-4 text-orange-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold text-orange-500'>
+											{visitorOverview?.pendingVisitors ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Avg Duration
+										</CardTitle>
+										<Timer className='h-4 w-4 text-purple-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{visitorOverview?.averageVisitDuration ||
+												0}
+											m
+										</div>
+									</CardContent>
+								</Card>
+							</div>
+
+							{/* Visitor Trends */}
+							<Card>
+								<CardHeader className='flex flex-row items-center justify-between'>
+									<div>
+										<CardTitle>Visitor Trends</CardTitle>
+										<CardDescription>
+											Daily visitor activity
+										</CardDescription>
+									</div>
+									<div className='flex gap-2'>
+										<Button
+											variant='outline'
+											size='sm'
+											onClick={() =>
+												exportVisitorTrends('csv')
+											}
+										>
+											<Download className='mr-2 h-4 w-4' />
+											CSV
+										</Button>
+										<Button
+											variant='outline'
+											size='sm'
+											onClick={() =>
+												exportVisitorTrends('excel')
+											}
+										>
+											<FileSpreadsheet className='mr-2 h-4 w-4' />
+											Excel
+										</Button>
+									</div>
+								</CardHeader>
+								<CardContent>
+									{visitorTrends.length > 0 ? (
+										<div className='space-y-2'>
+											{visitorTrends
+												.slice(-10)
+												.map((trend) => (
+													<div
+														key={trend.date}
+														className='flex items-center justify-between border-b pb-2 last:border-0'
+													>
+														<span className='text-sm'>
+															{format(
+																new Date(
+																	trend.date
+																),
+																'MMM dd, yyyy'
+															)}
+														</span>
+														<div className='flex items-center gap-4'>
+															<span className='text-sm text-muted-foreground'>
+																Total:{' '}
+																{trend.total}
+															</span>
+															<span className='text-sm text-green-600'>
+																In:{' '}
+																{
+																	trend.checkedIn
+																}
+															</span>
+															<span className='text-sm text-blue-600'>
+																Out:{' '}
+																{
+																	trend.checkedOut
+																}
+															</span>
+														</div>
+													</div>
+												))}
+										</div>
+									) : (
+										<p className='text-sm text-muted-foreground text-center py-8'>
+											No visitor data for this period
+										</p>
+									)}
+								</CardContent>
+							</Card>
+
+							{/* Repeat Visitors */}
+							<Card>
+								<CardHeader className='flex flex-row items-center justify-between'>
+									<div>
+										<CardTitle>
+											🔄 Repeat Visitors
+										</CardTitle>
+										<CardDescription>
+											Visitors who have come multiple
+											times
+										</CardDescription>
+									</div>
+									<div className='flex gap-2'>
+										<Button
+											variant='outline'
+											size='sm'
+											onClick={() =>
+												exportRepeatVisitors('csv')
+											}
+										>
+											<Download className='mr-2 h-4 w-4' />
+											CSV
+										</Button>
+										<Button
+											variant='outline'
+											size='sm'
+											onClick={() =>
+												exportRepeatVisitors('excel')
+											}
+										>
+											<FileSpreadsheet className='mr-2 h-4 w-4' />
+											Excel
+										</Button>
+									</div>
+								</CardHeader>
+								<CardContent>
+									{repeatVisitors.length > 0 ? (
+										<Table>
+											<TableHeader>
+												<TableRow>
+													<TableHead className='w-12'>
+														#
+													</TableHead>
+													<TableHead>
+														Visitor
+													</TableHead>
+													<TableHead>
+														Company
+													</TableHead>
+													<TableHead className='text-right'>
+														Visits
+													</TableHead>
+													<TableHead className='text-right'>
+														Total Time
+													</TableHead>
+													<TableHead className='text-right'>
+														Last Visit
+													</TableHead>
+												</TableRow>
+											</TableHeader>
+											<TableBody>
+												{repeatVisitors.map(
+													(visitor, i) => (
+														<TableRow
+															key={visitor.id}
+														>
+															<TableCell className='text-muted-foreground'>
+																{i + 1}
+															</TableCell>
+															<TableCell>
+																<div>
+																	<p className='font-medium'>
+																		{
+																			visitor.name
+																		}
+																	</p>
+																	<p className='text-xs text-muted-foreground'>
+																		{
+																			visitor.email
+																		}
+																	</p>
+																</div>
+															</TableCell>
+															<TableCell>
+																{visitor.company ||
+																	'-'}
+															</TableCell>
+															<TableCell className='text-right'>
+																<Badge variant='secondary'>
+																	{
+																		visitor.visitCount
+																	}
+																</Badge>
+															</TableCell>
+															<TableCell className='text-right'>
+																{Math.round(
+																	visitor.totalDuration /
+																		60
+																)}
+																h{' '}
+																{visitor.totalDuration %
+																	60}
+																m
+															</TableCell>
+															<TableCell className='text-right text-muted-foreground'>
+																{format(
+																	new Date(
+																		visitor.lastVisit
+																	),
+																	'MMM d'
+																)}
+															</TableCell>
+														</TableRow>
+													)
+												)}
+											</TableBody>
+										</Table>
+									) : (
+										<p className='text-sm text-muted-foreground text-center py-8'>
+											No repeat visitors for this period
+										</p>
+									)}
+								</CardContent>
+							</Card>
+						</TabsContent>
+
+						{/* CHECK-INS TAB */}
+						<TabsContent
+							value='checkins'
+							className='space-y-6'
+						>
+							<div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4'>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Total Check-ins
+										</CardTitle>
+										<LogIn className='h-4 w-4 text-muted-foreground' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{checkInOverview?.totalCheckIns ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											On-Time
+										</CardTitle>
+										<CheckCircle2 className='h-4 w-4 text-green-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold text-green-500'>
+											{checkInOverview?.onTimeCheckIns ||
+												0}
+										</div>
+										<p className='text-xs text-muted-foreground'>
+											{checkInOverview?.onTimeRate || 0}%
+											of scheduled
+										</p>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Late
+										</CardTitle>
+										<XCircle className='h-4 w-4 text-red-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold text-red-500'>
+											{checkInOverview?.lateCheckIns || 0}
+										</div>
+										<p className='text-xs text-muted-foreground'>
+											{checkInOverview?.lateRate || 0}% of
+											scheduled
+										</p>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Early
+										</CardTitle>
+										<AlertCircle className='h-4 w-4 text-blue-500' />
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold text-blue-500'>
+											{checkInOverview?.earlyCheckIns ||
+												0}
+										</div>
+										<p className='text-xs text-muted-foreground'>
+											{checkInOverview?.earlyRate || 0}%
+											of scheduled
+										</p>
+									</CardContent>
+								</Card>
+							</div>
+
+							{/* Check-in Type Breakdown */}
+							<div className='grid gap-4 md:grid-cols-3'>
+								<Card>
+									<CardHeader className='pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Booking Check-ins
+										</CardTitle>
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{checkInOverview?.bookingCheckIns ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Membership Check-ins
+										</CardTitle>
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{checkInOverview?.membershipCheckIns ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader className='pb-2'>
+										<CardTitle className='text-sm font-medium'>
+											Visitor Check-ins
+										</CardTitle>
+									</CardHeader>
+									<CardContent>
+										<div className='text-2xl font-bold'>
+											{checkInOverview?.visitorCheckIns ||
+												0}
+										</div>
+									</CardContent>
+								</Card>
+							</div>
+
+							{/* Punctuality Overview */}
+							<Card>
+								<CardHeader>
+									<CardTitle>Punctuality Overview</CardTitle>
+									<CardDescription>
+										Check-in timing distribution (±15
+										minutes threshold)
+									</CardDescription>
+								</CardHeader>
+								<CardContent className='space-y-4'>
+									<div className='space-y-2'>
+										<div className='flex items-center justify-between'>
+											<div className='flex items-center gap-2'>
+												<div className='h-3 w-3 rounded-full bg-green-500' />
+												<span className='text-sm'>
+													On-Time
+												</span>
+											</div>
+											<span className='font-medium'>
+												{checkInOverview?.onTimeRate ||
+													0}
+												%
+											</span>
+										</div>
+										<Progress
+											value={
+												checkInOverview?.onTimeRate || 0
+											}
+											className='h-2'
+										/>
+									</div>
+									<div className='space-y-2'>
+										<div className='flex items-center justify-between'>
+											<div className='flex items-center gap-2'>
+												<div className='h-3 w-3 rounded-full bg-red-500' />
+												<span className='text-sm'>
+													Late (15+ minutes)
+												</span>
+											</div>
+											<span className='font-medium'>
+												{checkInOverview?.lateRate || 0}
+												%
+											</span>
+										</div>
+										<Progress
+											value={
+												checkInOverview?.lateRate || 0
+											}
+											className='h-2 [&>div]:bg-red-500'
+										/>
+									</div>
+									<div className='space-y-2'>
+										<div className='flex items-center justify-between'>
+											<div className='flex items-center gap-2'>
+												<div className='h-3 w-3 rounded-full bg-blue-500' />
+												<span className='text-sm'>
+													Early (15+ minutes)
+												</span>
+											</div>
+											<span className='font-medium'>
+												{checkInOverview?.earlyRate ||
+													0}
+												%
+											</span>
+										</div>
+										<Progress
+											value={
+												checkInOverview?.earlyRate || 0
+											}
+											className='h-2 [&>div]:bg-blue-500'
+										/>
+									</div>
+									<div className='pt-4 border-t'>
+										<div className='flex items-center justify-between'>
+											<span className='text-sm text-muted-foreground'>
+												Average Delay
+											</span>
+											<span className='font-medium'>
+												{(checkInOverview?.averageCheckInDelay ||
+													0) > 0
+													? '+'
+													: ''}
+												{checkInOverview?.averageCheckInDelay ||
+													0}{' '}
+												min
+											</span>
+										</div>
+									</div>
+								</CardContent>
+							</Card>
+
+							{/* Check-in Trends */}
+							<Card>
+								<CardHeader className='flex flex-row items-center justify-between'>
+									<div>
+										<CardTitle>Check-in Trends</CardTitle>
+										<CardDescription>
+											Daily check-in activity
+										</CardDescription>
+									</div>
+									<div className='flex gap-2'>
+										<Button
+											variant='outline'
+											size='sm'
+											onClick={() =>
+												exportCheckInTrends('csv')
+											}
+										>
+											<Download className='mr-2 h-4 w-4' />
+											CSV
+										</Button>
+										<Button
+											variant='outline'
+											size='sm'
+											onClick={() =>
+												exportCheckInTrends('excel')
+											}
+										>
+											<FileSpreadsheet className='mr-2 h-4 w-4' />
+											Excel
+										</Button>
+									</div>
+								</CardHeader>
+								<CardContent>
+									{checkInTrends.length > 0 ? (
+										<div className='space-y-2'>
+											{checkInTrends
+												.slice(-10)
+												.map((trend) => (
+													<div
+														key={trend.date}
+														className='flex items-center justify-between border-b pb-2 last:border-0'
+													>
+														<span className='text-sm'>
+															{format(
+																new Date(
+																	trend.date
+																),
+																'MMM dd, yyyy'
+															)}
+														</span>
+														<div className='flex items-center gap-3'>
+															<span className='text-xs text-muted-foreground'>
+																B:{' '}
+																{trend.bookings}
+															</span>
+															<span className='text-xs text-muted-foreground'>
+																M:{' '}
+																{
+																	trend.memberships
+																}
+															</span>
+															<span className='text-xs text-muted-foreground'>
+																V:{' '}
+																{trend.visitors}
+															</span>
+															<span className='text-sm text-green-600'>
+																✓ {trend.onTime}
+															</span>
+															<span className='text-sm text-red-600'>
+																✗ {trend.late}
+															</span>
+															<span className='font-medium'>
+																Total:{' '}
+																{trend.total}
+															</span>
+														</div>
+													</div>
+												))}
+										</div>
+									) : (
+										<p className='text-sm text-muted-foreground text-center py-8'>
+											No check-in data for this period
 										</p>
 									)}
 								</CardContent>

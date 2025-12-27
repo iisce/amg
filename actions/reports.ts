@@ -34,7 +34,7 @@ export interface ReportResult<T> {
 // HELPER FUNCTIONS
 // ============================================
 
-export function getDateRangeFromTimeFrame(
+function getDateRangeFromTimeFrame(
 	timeFrame: TimeFrame,
 	customRange?: { start: string; end: string }
 ): DateRange {
@@ -1626,6 +1626,726 @@ export async function getClientLeaderboard(
 		return {
 			success: false,
 			message: 'Failed to get client leaderboard',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+// ============================================
+// POPULAR MEMBERSHIP PLANS
+// ============================================
+
+export interface PopularMembershipPlan {
+	id: string;
+	name: string;
+	spaceName: string;
+	spaceType: string;
+	billingCycle: string;
+	subscriberCount: number;
+	totalRevenue: number;
+	averagePrice: number;
+	renewalRate: number;
+}
+
+export async function getPopularMembershipPlans(
+	timeFrame: TimeFrame,
+	customRange?: { start: string; end: string },
+	limit: number = 10
+): Promise<ReportResult<PopularMembershipPlan[]>> {
+	try {
+		const admin = await getCurrentAdmin();
+		if (!admin) {
+			return { success: false, message: 'Unauthorized' };
+		}
+
+		const { startDate, endDate } = getDateRangeFromTimeFrame(
+			timeFrame,
+			customRange
+		);
+
+		// Get memberships with their plans
+		const memberships = await prisma.membership.findMany({
+			where: {
+				createdAt: { gte: startDate, lte: endDate },
+			},
+			include: {
+				pricingPlan: {
+					select: {
+						id: true,
+						name: true,
+						unit: true,
+						space: {
+							select: {
+								name: true,
+								type: true,
+							},
+						},
+					},
+				},
+				payments: {
+					where: { status: 'PAID' },
+					select: { amount: true },
+				},
+			},
+		});
+
+		// Aggregate by plan
+		const planStats = new Map<
+			string,
+			{
+				plan: {
+					id: string;
+					name: string;
+					unit: string;
+					space: { name: string; type: string };
+				};
+				count: number;
+				revenue: number;
+				renewed: number;
+			}
+		>();
+
+		memberships.forEach((m) => {
+			const existing = planStats.get(m.pricingPlanId);
+			const revenue = m.payments.reduce(
+				(sum: number, p: { amount: number }) => sum + p.amount,
+				0
+			);
+			const isRenewed = m.renewedAt ? 1 : 0;
+
+			if (existing) {
+				existing.count++;
+				existing.revenue += revenue;
+				existing.renewed += isRenewed;
+			} else {
+				planStats.set(m.pricingPlanId, {
+					plan: m.pricingPlan,
+					count: 1,
+					revenue,
+					renewed: isRenewed,
+				});
+			}
+		});
+
+		const popularPlans = Array.from(planStats.values())
+			.map(({ plan, count, revenue, renewed }) => ({
+				id: plan.id,
+				name: plan.name,
+				spaceName: plan.space.name,
+				spaceType: plan.space.type,
+				billingCycle: plan.unit,
+				subscriberCount: count,
+				totalRevenue: revenue,
+				averagePrice: count > 0 ? Math.round(revenue / count) : 0,
+				renewalRate:
+					count > 0 ? Math.round((renewed / count) * 100) : 0,
+			}))
+			.sort((a, b) => b.subscriberCount - a.subscriberCount)
+			.slice(0, limit);
+
+		return {
+			success: true,
+			message: 'Popular membership plans retrieved',
+			data: popularPlans,
+		};
+	} catch (error) {
+		console.error('Error getting popular membership plans:', error);
+		return {
+			success: false,
+			message: 'Failed to get popular membership plans',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+// ============================================
+// VISITOR ANALYTICS (EXTENDED)
+// ============================================
+
+export interface VisitorTrend {
+	date: string;
+	total: number;
+	checkedIn: number;
+	checkedOut: number;
+}
+
+export async function getVisitorTrends(
+	timeFrame: TimeFrame,
+	customRange?: { start: string; end: string }
+): Promise<ReportResult<VisitorTrend[]>> {
+	try {
+		const admin = await getCurrentAdmin();
+		if (!admin) {
+			return { success: false, message: 'Unauthorized' };
+		}
+
+		const { startDate, endDate } = getDateRangeFromTimeFrame(
+			timeFrame,
+			customRange
+		);
+
+		const visitors = await prisma.visitor.findMany({
+			where: {
+				createdAt: { gte: startDate, lte: endDate },
+			},
+			select: {
+				createdAt: true,
+				status: true,
+				checkInTime: true,
+			},
+		});
+
+		// Group by date
+		const trendsMap = new Map<string, VisitorTrend>();
+
+		visitors.forEach((v) => {
+			const dateKey = v.createdAt.toISOString().split('T')[0];
+			const existing = trendsMap.get(dateKey) || {
+				date: dateKey,
+				total: 0,
+				checkedIn: 0,
+				checkedOut: 0,
+			};
+
+			existing.total++;
+			if (v.status === 'CHECKED_IN') existing.checkedIn++;
+			if (v.status === 'CHECKED_OUT') existing.checkedOut++;
+
+			trendsMap.set(dateKey, existing);
+		});
+
+		const trends = Array.from(trendsMap.values()).sort(
+			(a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+		);
+
+		return {
+			success: true,
+			message: 'Visitor trends retrieved',
+			data: trends,
+		};
+	} catch (error) {
+		console.error('Error getting visitor trends:', error);
+		return {
+			success: false,
+			message: 'Failed to get visitor trends',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+export interface RepeatVisitor {
+	id: string;
+	name: string;
+	email: string | null;
+	company: string | null;
+	visitCount: number;
+	lastVisit: Date;
+	totalDuration: number; // in minutes
+}
+
+export async function getRepeatVisitors(
+	timeFrame: TimeFrame,
+	customRange?: { start: string; end: string },
+	limit: number = 10
+): Promise<ReportResult<RepeatVisitor[]>> {
+	try {
+		const admin = await getCurrentAdmin();
+		if (!admin) {
+			return { success: false, message: 'Unauthorized' };
+		}
+
+		const { startDate, endDate } = getDateRangeFromTimeFrame(
+			timeFrame,
+			customRange
+		);
+
+		// Get all visitors with same email/phone (repeat visitors)
+		const visitors = await prisma.visitor.findMany({
+			where: {
+				createdAt: { gte: startDate, lte: endDate },
+				email: { not: null },
+			},
+			select: {
+				id: true,
+				name: true,
+				email: true,
+				company: true,
+				checkInTime: true,
+				checkOutTime: true,
+				createdAt: true,
+			},
+		});
+
+		// Group by email
+		const visitorMap = new Map<
+			string,
+			{
+				name: string;
+				email: string;
+				company: string | null;
+				visits: {
+					checkIn: Date | null;
+					checkOut: Date | null;
+					createdAt: Date;
+				}[];
+			}
+		>();
+
+		visitors.forEach((v) => {
+			if (!v.email) return;
+			const existing = visitorMap.get(v.email);
+			if (existing) {
+				existing.visits.push({
+					checkIn: v.checkInTime,
+					checkOut: v.checkOutTime,
+					createdAt: v.createdAt,
+				});
+			} else {
+				visitorMap.set(v.email, {
+					name: v.name,
+					email: v.email,
+					company: v.company,
+					visits: [
+						{
+							checkIn: v.checkInTime,
+							checkOut: v.checkOutTime,
+							createdAt: v.createdAt,
+						},
+					],
+				});
+			}
+		});
+
+		const repeatVisitors = Array.from(visitorMap.entries())
+			.filter(([_, data]) => data.visits.length > 1)
+			.map(([email, data]) => {
+				const totalDuration = data.visits.reduce((sum, v) => {
+					if (v.checkIn && v.checkOut) {
+						return (
+							sum +
+							(v.checkOut.getTime() - v.checkIn.getTime()) /
+								(1000 * 60)
+						);
+					}
+					return sum;
+				}, 0);
+
+				const lastVisit = data.visits.reduce(
+					(latest, v) =>
+						v.createdAt > latest ? v.createdAt : latest,
+					data.visits[0].createdAt
+				);
+
+				return {
+					id: email,
+					name: data.name,
+					email: data.email,
+					company: data.company,
+					visitCount: data.visits.length,
+					lastVisit,
+					totalDuration: Math.round(totalDuration),
+				};
+			})
+			.sort((a, b) => b.visitCount - a.visitCount)
+			.slice(0, limit);
+
+		return {
+			success: true,
+			message: 'Repeat visitors retrieved',
+			data: repeatVisitors,
+		};
+	} catch (error) {
+		console.error('Error getting repeat visitors:', error);
+		return {
+			success: false,
+			message: 'Failed to get repeat visitors',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+// ============================================
+// CHECK-IN ANALYTICS
+// ============================================
+
+export interface CheckInOverview {
+	totalCheckIns: number;
+	bookingCheckIns: number;
+	membershipCheckIns: number;
+	visitorCheckIns: number;
+	onTimeCheckIns: number;
+	lateCheckIns: number;
+	earlyCheckIns: number;
+	onTimeRate: number;
+	lateRate: number;
+	earlyRate: number;
+	averageCheckInDelay: number; // in minutes (negative = early)
+}
+
+export async function getCheckInOverview(
+	timeFrame: TimeFrame,
+	customRange?: { start: string; end: string }
+): Promise<ReportResult<CheckInOverview>> {
+	try {
+		const admin = await getCurrentAdmin();
+		if (!admin) {
+			return { success: false, message: 'Unauthorized' };
+		}
+
+		const { startDate, endDate } = getDateRangeFromTimeFrame(
+			timeFrame,
+			customRange
+		);
+
+		// Get booking check-ins
+		const bookingCheckIns = await prisma.booking.findMany({
+			where: {
+				checkInTime: { gte: startDate, lte: endDate },
+				status: { in: ['CHECKED_IN', 'COMPLETED'] },
+			},
+			select: {
+				startTime: true,
+				checkInTime: true,
+			},
+		});
+
+		// Get membership check-ins
+		const membershipCheckIns = await prisma.membershipCheckIn.findMany({
+			where: {
+				checkInTime: { gte: startDate, lte: endDate },
+			},
+			select: {
+				checkInTime: true,
+			},
+		});
+
+		// Get visitor check-ins
+		const visitorCheckIns = await prisma.visitor.findMany({
+			where: {
+				checkInTime: { gte: startDate, lte: endDate },
+			},
+			select: {
+				validFrom: true,
+				checkInTime: true,
+			},
+		});
+
+		// Calculate timing stats for bookings (have scheduled times)
+		let onTime = 0;
+		let late = 0;
+		let early = 0;
+		let totalDelay = 0;
+
+		const EARLY_THRESHOLD = -15; // minutes before scheduled time
+		const LATE_THRESHOLD = 15; // minutes after scheduled time
+
+		bookingCheckIns.forEach((b) => {
+			if (!b.checkInTime) return;
+			const delayMinutes =
+				(b.checkInTime.getTime() - b.startTime.getTime()) / (1000 * 60);
+
+			totalDelay += delayMinutes;
+
+			if (delayMinutes < EARLY_THRESHOLD) {
+				early++;
+			} else if (delayMinutes > LATE_THRESHOLD) {
+				late++;
+			} else {
+				onTime++;
+			}
+		});
+
+		// For visitors with scheduled time
+		visitorCheckIns.forEach((v) => {
+			if (!v.checkInTime) return;
+			const delayMinutes =
+				(v.checkInTime.getTime() - v.validFrom.getTime()) / (1000 * 60);
+
+			totalDelay += delayMinutes;
+
+			if (delayMinutes < EARLY_THRESHOLD) {
+				early++;
+			} else if (delayMinutes > LATE_THRESHOLD) {
+				late++;
+			} else {
+				onTime++;
+			}
+		});
+
+		const totalWithSchedule =
+			bookingCheckIns.length + visitorCheckIns.length;
+		const totalCheckIns =
+			bookingCheckIns.length +
+			membershipCheckIns.length +
+			visitorCheckIns.length;
+
+		return {
+			success: true,
+			message: 'Check-in overview retrieved',
+			data: {
+				totalCheckIns,
+				bookingCheckIns: bookingCheckIns.length,
+				membershipCheckIns: membershipCheckIns.length,
+				visitorCheckIns: visitorCheckIns.length,
+				onTimeCheckIns: onTime,
+				lateCheckIns: late,
+				earlyCheckIns: early,
+				onTimeRate:
+					totalWithSchedule > 0
+						? Math.round((onTime / totalWithSchedule) * 100)
+						: 0,
+				lateRate:
+					totalWithSchedule > 0
+						? Math.round((late / totalWithSchedule) * 100)
+						: 0,
+				earlyRate:
+					totalWithSchedule > 0
+						? Math.round((early / totalWithSchedule) * 100)
+						: 0,
+				averageCheckInDelay:
+					totalWithSchedule > 0
+						? Math.round(totalDelay / totalWithSchedule)
+						: 0,
+			},
+		};
+	} catch (error) {
+		console.error('Error getting check-in overview:', error);
+		return {
+			success: false,
+			message: 'Failed to get check-in overview',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+export interface CheckInTrend {
+	date: string;
+	total: number;
+	bookings: number;
+	memberships: number;
+	visitors: number;
+	onTime: number;
+	late: number;
+	early: number;
+}
+
+export async function getCheckInTrends(
+	timeFrame: TimeFrame,
+	customRange?: { start: string; end: string }
+): Promise<ReportResult<CheckInTrend[]>> {
+	try {
+		const admin = await getCurrentAdmin();
+		if (!admin) {
+			return { success: false, message: 'Unauthorized' };
+		}
+
+		const { startDate, endDate } = getDateRangeFromTimeFrame(
+			timeFrame,
+			customRange
+		);
+
+		const EARLY_THRESHOLD = -15;
+		const LATE_THRESHOLD = 15;
+
+		// Get all check-ins
+		const [bookings, memberships, visitors] = await Promise.all([
+			prisma.booking.findMany({
+				where: {
+					checkInTime: { gte: startDate, lte: endDate },
+				},
+				select: {
+					startTime: true,
+					checkInTime: true,
+				},
+			}),
+			prisma.membershipCheckIn.findMany({
+				where: {
+					checkInTime: { gte: startDate, lte: endDate },
+				},
+				select: {
+					checkInTime: true,
+				},
+			}),
+			prisma.visitor.findMany({
+				where: {
+					checkInTime: { gte: startDate, lte: endDate },
+				},
+				select: {
+					validFrom: true,
+					checkInTime: true,
+				},
+			}),
+		]);
+
+		const trendsMap = new Map<string, CheckInTrend>();
+
+		// Process bookings
+		bookings.forEach((b) => {
+			if (!b.checkInTime) return;
+			const dateKey = b.checkInTime.toISOString().split('T')[0];
+			const existing = trendsMap.get(dateKey) || {
+				date: dateKey,
+				total: 0,
+				bookings: 0,
+				memberships: 0,
+				visitors: 0,
+				onTime: 0,
+				late: 0,
+				early: 0,
+			};
+
+			existing.total++;
+			existing.bookings++;
+
+			const delay =
+				(b.checkInTime.getTime() - b.startTime.getTime()) / (1000 * 60);
+			if (delay < EARLY_THRESHOLD) existing.early++;
+			else if (delay > LATE_THRESHOLD) existing.late++;
+			else existing.onTime++;
+
+			trendsMap.set(dateKey, existing);
+		});
+
+		// Process memberships
+		memberships.forEach((m) => {
+			const dateKey = m.checkInTime.toISOString().split('T')[0];
+			const existing = trendsMap.get(dateKey) || {
+				date: dateKey,
+				total: 0,
+				bookings: 0,
+				memberships: 0,
+				visitors: 0,
+				onTime: 0,
+				late: 0,
+				early: 0,
+			};
+
+			existing.total++;
+			existing.memberships++;
+			trendsMap.set(dateKey, existing);
+		});
+
+		// Process visitors
+		visitors.forEach((v) => {
+			if (!v.checkInTime) return;
+			const dateKey = v.checkInTime.toISOString().split('T')[0];
+			const existing = trendsMap.get(dateKey) || {
+				date: dateKey,
+				total: 0,
+				bookings: 0,
+				memberships: 0,
+				visitors: 0,
+				onTime: 0,
+				late: 0,
+				early: 0,
+			};
+
+			existing.total++;
+			existing.visitors++;
+
+			const delay =
+				(v.checkInTime.getTime() - v.validFrom.getTime()) / (1000 * 60);
+			if (delay < EARLY_THRESHOLD) existing.early++;
+			else if (delay > LATE_THRESHOLD) existing.late++;
+			else existing.onTime++;
+
+			trendsMap.set(dateKey, existing);
+		});
+
+		const trends = Array.from(trendsMap.values()).sort(
+			(a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+		);
+
+		return {
+			success: true,
+			message: 'Check-in trends retrieved',
+			data: trends,
+		};
+	} catch (error) {
+		console.error('Error getting check-in trends:', error);
+		return {
+			success: false,
+			message: 'Failed to get check-in trends',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
+	}
+}
+
+// ============================================
+// BOOKING TRENDS (SEPARATE FROM REVENUE)
+// ============================================
+
+export interface BookingTrend {
+	date: string;
+	total: number;
+	confirmed: number;
+	completed: number;
+	cancelled: number;
+	noShow: number;
+}
+
+export async function getBookingTrends(
+	timeFrame: TimeFrame,
+	customRange?: { start: string; end: string }
+): Promise<ReportResult<BookingTrend[]>> {
+	try {
+		const admin = await getCurrentAdmin();
+		if (!admin) {
+			return { success: false, message: 'Unauthorized' };
+		}
+
+		const { startDate, endDate } = getDateRangeFromTimeFrame(
+			timeFrame,
+			customRange
+		);
+
+		const bookings = await prisma.booking.findMany({
+			where: {
+				createdAt: { gte: startDate, lte: endDate },
+			},
+			select: {
+				createdAt: true,
+				status: true,
+			},
+		});
+
+		const trendsMap = new Map<string, BookingTrend>();
+
+		bookings.forEach((b) => {
+			const dateKey = b.createdAt.toISOString().split('T')[0];
+			const existing = trendsMap.get(dateKey) || {
+				date: dateKey,
+				total: 0,
+				confirmed: 0,
+				completed: 0,
+				cancelled: 0,
+				noShow: 0,
+			};
+
+			existing.total++;
+			if (b.status === 'CONFIRMED' || b.status === 'CHECKED_IN')
+				existing.confirmed++;
+			if (b.status === 'COMPLETED') existing.completed++;
+			if (b.status === 'CANCELLED') existing.cancelled++;
+			if (b.status === 'NO_SHOW') existing.noShow++;
+
+			trendsMap.set(dateKey, existing);
+		});
+
+		const trends = Array.from(trendsMap.values()).sort(
+			(a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+		);
+
+		return {
+			success: true,
+			message: 'Booking trends retrieved',
+			data: trends,
+		};
+	} catch (error) {
+		console.error('Error getting booking trends:', error);
+		return {
+			success: false,
+			message: 'Failed to get booking trends',
 			error: error instanceof Error ? error.message : 'Unknown error',
 		};
 	}

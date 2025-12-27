@@ -513,6 +513,40 @@ export function createSubscriptionPausedEmail(
 	};
 }
 
+export function createSubscriptionResumedEmail(
+	membership: Membership & {
+		user: { name: string; email: string };
+		space: { name: string };
+	}
+): {
+	subject: string;
+	html: string;
+} {
+	const content = `
+		<h2>Subscription Resumed ✅</h2>
+		<p>Hi ${membership.user.name},</p>
+		<p>Great news! Your subscription has been successfully resumed.</p>
+
+		<div class="info-box">
+			<p style="margin: 0;"><strong>Membership ID: ${membership.membershipNumber}</strong></p>
+			<p style="margin: 10px 0 0 0;">Space: ${membership.space.name}</p>
+			<p style="margin: 5px 0 0 0;">Status: ACTIVE</p>
+		</div>
+
+		<p>Your subscription is now active again. You can access your workspace and enjoy all the benefits of your membership.</p>
+
+		<a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard/subscriptions" class="button">View Subscription</a>
+
+		<p>Thank you for being a member of AMG Workspace!</p>
+		<p>Best regards,<br>The AMG Workspace Team</p>
+	`;
+
+	return {
+		subject: `Subscription Resumed - ${membership.membershipNumber}`,
+		html: createEmailTemplate(content),
+	};
+}
+
 // ============================================
 // ENQUIRY EMAILS
 // ============================================
