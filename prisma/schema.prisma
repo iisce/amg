@@ -85,6 +85,32 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+// ============================================
+// SYSTEM SETTINGS
+// ============================================
+
+model SystemSettings {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String @db.Text
+  type  SettingType @default(STRING)
+  group String      @default("general") // For categorizing: general, finance, email, etc.
+  label String? // Human-readable label
+  description String? // Help text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([group])
+  @@index([key])
+}
+
+enum SettingType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
+
 model PasswordResetToken {
   id        String   @id @default(cuid())
   userId    String   @unique
@@ -389,7 +415,10 @@ model Booking {
   startTime     DateTime
   endTime       DateTime
   attendees     Int           @default(1)
-  totalAmount   Int // Amount in kobo
+  subtotal      Int           @default(0) // Base amount before tax (in kobo) - default 0 for migration
+  taxAmount     Int           @default(0) // Tax amount (in kobo)
+  taxRate       Float         @default(0) // Tax rate applied (e.g., 7.5)
+  totalAmount   Int // Total including tax (in kobo)
   status        BookingStatus @default(PENDING)
   paymentStatus PaymentStatus @default(PENDING)
   qrCode        String        @unique
@@ -448,7 +477,10 @@ model Payment {
   userId          String
   bookingId       String?       @unique
   membershipId    String?       @unique
-  amount          Int // Amount in kobo
+  subtotal        Int           @default(0) // Base amount before tax (in kobo) - default 0 for migration
+  taxAmount       Int           @default(0) // Tax amount (in kobo)
+  taxRate         Float         @default(0) // Tax rate at time of payment (e.g., 7.5 for 7.5%)
+  amount          Int // Total amount including tax (in kobo)
   currency        String        @default("NGN")
   method          PaymentMethod @default(CARD)
   provider        String        @default("paystack") // paystack, flutterwave, transfer
@@ -491,7 +523,10 @@ model Membership {
   spaceId          String
   pricingPlanId    String
   type             MembershipType
-  totalAmount      Int // Price in kobo
+  subtotal         Int              @default(0) // Base amount before tax (in kobo) - default 0 for migration
+  taxAmount        Int              @default(0) // Tax amount (in kobo)
+  taxRate          Float            @default(0) // Tax rate applied (e.g., 7.5)
+  totalAmount      Int // Total including tax (in kobo)
   startDate        DateTime
   endDate          DateTime
   status           MembershipStatus @default(PENDING)

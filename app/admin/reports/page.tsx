@@ -1,54 +1,90 @@
 import { redirect } from 'next/navigation';
 import { getCurrentAdmin } from '@/actions';
-import { getRevenueReport, getSpaceUtilization } from '@/actions/admin';
-import { prisma } from '@/lib/db';
+import {
+	getRevenueOverview,
+	getRevenueTrends,
+	getClientOverview,
+	getTopClientsByRevenue,
+	getBookingOverview,
+	getPopularSpaces,
+	getTopShopItems,
+	getMembershipOverview,
+	getReportSpaceUtilization,
+	getClientLeaderboard,
+	getEarlyBirdClients,
+	type TimeFrame,
+} from '@/actions/reports';
 import AdminReportsClient from './admin-reports-client';
 
-export default async function AdminReportsPage() {
-	const admin = await getCurrentAdmin();
+interface SearchParams {
+	timeframe?: string;
+	start?: string;
+	end?: string;
+	tab?: string;
+}
 
+export default async function AdminReportsPage({
+	searchParams,
+}: {
+	searchParams: Promise<SearchParams>;
+}) {
+	const admin = await getCurrentAdmin();
 	if (!admin) {
 		redirect('/admin/login');
 	}
 
-	// Get report data
-	const now = new Date();
-	const thirtyDaysAgo = new Date(now);
-	thirtyDaysAgo.setDate(now.getDate() - 30);
+	const params = await searchParams;
+	const timeFrame = (params.timeframe as TimeFrame) || 'last30days';
+	const customRange =
+		params.start && params.end
+			? { start: params.start, end: params.end }
+			: undefined;
+	const activeTab = params.tab || 'overview';
 
+	// Fetch all data in parallel
 	const [
-		revenueResult,
-		utilizationResult,
-		totalRevenue,
-		totalBookings,
-		totalUsers,
+		revenueOverview,
+		revenueTrends,
+		clientOverview,
+		topClients,
+		bookingOverview,
+		popularSpaces,
+		topShopItems,
+		membershipOverview,
+		spaceUtilization,
+		leaderboard,
+		earlyBirds,
 	] = await Promise.all([
-		getRevenueReport({
-			startDate: thirtyDaysAgo,
-			endDate: now,
-			groupBy: 'day',
-		}),
-		getSpaceUtilization(),
-		prisma.payment.aggregate({
-			where: { status: 'PAID' },
-			_sum: { amount: true },
-		}),
-		prisma.booking.count({ where: { status: 'COMPLETED' } }),
-		prisma.user.count({ where: { role: 'CLIENT' } }),
+		getRevenueOverview(timeFrame, customRange),
+		getRevenueTrends(timeFrame, customRange),
+		getClientOverview(timeFrame, customRange),
+		getTopClientsByRevenue(timeFrame, customRange, 10),
+		getBookingOverview(timeFrame, customRange),
+		getPopularSpaces(timeFrame, customRange, 10),
+		getTopShopItems(timeFrame, customRange, 10),
+		getMembershipOverview(timeFrame, customRange),
+		getReportSpaceUtilization(timeFrame, customRange),
+		getClientLeaderboard(timeFrame, customRange, 10),
+		getEarlyBirdClients(timeFrame, customRange, 10),
 	]);
-
-	const revenueData = revenueResult.success ? revenueResult.data! : [];
-	const spaceUtilization = utilizationResult.success
-		? utilizationResult.data!
-		: [];
 
 	return (
 		<AdminReportsClient
-			revenueData={revenueData}
-			spaceUtilization={spaceUtilization}
-			totalRevenue={totalRevenue._sum?.amount || 0}
-			totalBookings={totalBookings}
-			totalUsers={totalUsers}
+			admin={admin}
+			timeFrame={timeFrame}
+			customRange={customRange}
+			activeTab={activeTab}
+			revenueOverview={revenueOverview.data || null}
+			revenueTrends={revenueTrends.data || []}
+			clientOverview={clientOverview.data || null}
+			topClients={topClients.data || []}
+			bookingOverview={bookingOverview.data || null}
+			popularSpaces={popularSpaces.data || []}
+			topShopItems={topShopItems.data || []}
+			membershipOverview={membershipOverview.data || null}
+			spaceUtilization={spaceUtilization.data || []}
+			leaderboard={leaderboard.data || null}
+			earlyBirds={earlyBirds.data || []}
 		/>
 	);
 }

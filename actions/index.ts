@@ -16,3 +16,5 @@ export * from './visitors';
 export * from './tours';
 export * from './inventory';
 export * from './shop';
+export * from './finance';
+export * from './reports';
