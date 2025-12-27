@@ -1,292 +1,127 @@
-# Space Booking System - AI Coding Agent Instructions
+# AMG Workspace - Copilot Instructions
 
 ## Project Overview
 
-Next.js 16 coworking space booking platform for AMG Workspace in Lagos, Nigeria. Users can browse spaces, make bookings/subscriptions, and admins manage operations.
+A coworking space booking system built with **Next.js 16**, **Prisma 7**, **NextAuth v5**, and **shadcn/ui**. Supports space bookings, subscriptions (memberships), add-ons, shop, and visitor management.
 
-## Tech Stack
+## Architecture
 
--   **Frontend**: Next.js 16 (App Router), React 19, TypeScript
--   **Backend**: Next.js Server Actions (in `actions/` folder)
--   **Database**: PostgreSQL via Prisma ORM
--   **Auth**: Custom session-based authentication with cookies
--   **State**: Zustand with persist middleware (client-side)
--   **UI**: Radix UI components with Tailwind CSS v4
--   **Styling**: `shadcn/ui` (New York variant), `class-variance-authority`, `tailwind-merge`
--   **Forms**: React Hook Form + Zod validation
--   **Icons**: Lucide React
--   **Payments**: Paystack integration (prepared)
+### Data Flow Pattern
 
-## Architecture Patterns
+1. **Server Actions** (`actions/*.ts`) - All data mutations use `'use server'` directive
+2. **Prisma Client** via `@/lib/db` - Single PostgreSQL connection with adapter pattern
+3. **Client State** - Zustand stores (`store/`) for booking flow persistence
 
-### 1. Server Actions Architecture
+### Key Directories
 
-The backend uses **Next.js Server Actions** instead of API routes. All server-side logic lives in the `actions/` folder:
+-   `actions/` - Server actions organized by domain (bookings, subscriptions, payments, etc.)
+-   `app/admin/` - Admin panel (staff, front desk, admins)
+-   `app/dashboard/` - Client portal
+-   `lib/permissions.ts` - RBAC with role hierarchy (CLIENT → SUPER_ADMIN)
 
-```
-actions/
-├── index.ts          # Re-exports all actions
-├── auth.ts           # Authentication (login, register, sessions)
-├── spaces.ts         # Space & pricing plan CRUD
-├── bookings.ts       # Booking management, check-in/out
-├── subscriptions.ts  # Membership/subscription handling
-├── payments.ts       # Paystack integration, payment flow
-├── users.ts          # User profile, admin user management
-└── admin.ts          # Dashboard stats, reports, admin operations
-```
+### Two Space Types
 
-**Usage pattern in components**:
+-   **SUBSCRIPTION** spaces (shared desks, private offices) → Creates `Membership`
+-   **BOOKING** spaces (board room, training room) → Creates `Booking`
+
+## Code Conventions
+
+### Server Actions Pattern
 
 ```typescript
-import { getSpaces, createBooking } from '@/actions';
+// actions/example.ts
+'use server';
+import { prisma } from '@/lib/db';
+import { revalidatePath } from 'next/cache';
 
-// In a server component
-const spaces = await getSpaces();
+export interface ExampleResult {
+	success: boolean;
+	message: string;
+	data?: SomeType;
+	error?: string;
+}
 
-// In a client component with form
-const handleSubmit = async (data: FormData) => {
-	const result = await createBooking(data);
-	if (result.success) {
-		/* ... */
+export async function doSomething(): Promise<ExampleResult> {
+	try {
+		// ... logic
+		revalidatePath('/relevant-path');
+		return { success: true, message: 'Done', data };
+	} catch (error) {
+		return {
+			success: false,
+			message: 'Failed',
+			error: error instanceof Error ? error.message : 'Unknown error',
+		};
 	}
-};
+}
 ```
 
-### 2. Dual User Flow Architecture
+### Currency Handling
 
-The app has **two separate authentication flows** with distinct UIs:
+All prices stored in **kobo** (smallest unit). Display in Naira using `formatCurrency()` from `lib/utils/`.
 
-**Client Flow** (booking users):
+### Authentication
 
--   Routes: `/login`, `/register`, `/dashboard/*`, `/booking/*`, `/spaces/*`
--   Auth: `getCurrentUser()` from `actions/auth.ts`
--   State: Zustand store for booking data persistence
+-   `getCurrentUser()` from `actions/auth.ts` - Get session user in server actions
+-   `auth()` from `@/auth` - Direct NextAuth access
+-   Middleware protects routes; admin routes require `ADMIN_ROLES` check
 
-**Admin Flow** (staff/management):
+### Role-Based Access
 
--   Routes: `/admin/login`, `/admin/dashboard`, `/admin/spaces/*`, `/admin/bookings/*`
--   Auth: `getCurrentAdmin()` from `actions/auth.ts`
--   Roles: `ADMIN`, `STAFF`, `SUPER_ADMIN`
+Six roles with hierarchy in `lib/permissions.ts`:
 
-Never mix admin and client components - they have different layouts and navigation patterns.
-
-### 3. Prisma Schema Design
-
-Database uses **kobo pricing** (prices stored as integers in smallest currency unit):
-
-```prisma
-price Int  // 550000 kobo = ₦5,500 in Naira
+```
+CLIENT < FRONT_DESK_ASSISTANT < FRONT_DESK < STAFF < ADMIN < SUPER_ADMIN
 ```
 
-**Always multiply by 100** when storing currency, divide by 100 when displaying.
+Use `hasPermission(role, 'permission:action')` for access control.
 
-Key relationships:
+### UI Components
 
--   `Booking` → `User`, `Space`, `PricingPlan`, `Payment?`
--   `Membership` → `User`, `Space`, `PricingPlan`, `Payment[]`
--   Each `Space` has multiple `PricingPlan` options (hourly/daily/monthly)
--   QR codes are unique per booking for check-in validation
--   `ActivityLog` tracks all user/admin actions
-
-### 4. UI Component Patterns
-
-All UI components follow shadcn/ui conventions from [components/ui/](components/ui/):
-
-**Button with variants**:
+Use shadcn/ui from `components/ui/`. Import pattern:
 
 ```typescript
-<Button variant="default|destructive|outline|ghost|link" size="default|sm|lg|icon">
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
 ```
 
-**Form pattern** (react-hook-form + shadcn):
+## Database Commands
+
+```bash
+pnpm db:studio    # Open Prisma Studio
+pnpm db:seed      # Seed database
+pnpm db:reset     # Reset and reseed
+npx prisma migrate dev --name <name>  # Create migration
+```
+
+## Key Patterns
+
+### Booking Flow (Zustand Store)
 
 ```typescript
-import { useForm } from 'react-hook-form';
-import { Form, FormField, FormControl } from '@/components/ui/form';
+import { useBookingStore } from '@/store/booking-store';
+const { bookingData, setBookingData, clearData } = useBookingStore();
 ```
 
-**Import alias**: Always use `@/` for absolute imports (configured in [tsconfig.json](tsconfig.json))
+### Email Templates
 
-### 5. Space Types & Booking Models
+Create email content in `lib/email-templates.ts`, send via `sendEmail()` from `lib/email.ts`.
 
-Two distinct booking models in the codebase:
+### Plan Perks & Add-ons
 
-**Subscription Spaces** (long-term):
+-   `PlanPerk` - Benefits included with pricing plans (e.g., "1hr Board Room/week")
+-   `Addon` - Purchasable extras with types: SUBSCRIPTION, BOOKING, SHOP, UNIVERSAL
 
--   Shared desks, private offices (1-man, 2-man, 4-man)
--   Monthly/weekly/daily plans
--   No time slot selection
+## Critical Files
 
-**Booking Spaces** (short-term):
+-   [prisma/schema.prisma](prisma/schema.prisma) - Complete data model (1000+ lines)
+-   [middleware.ts](middleware.ts) - Route protection logic
+-   [lib/permissions.ts](lib/permissions.ts) - RBAC definitions
+-   [actions/index.ts](actions/index.ts) - All server actions exported
 
--   Board room, training room, photo studio, lounge
--   Hourly/session-based with time slot selection
--   Check-in via QR code
+## Development Notes
 
-Store pattern distinguishes these via `type` field (see [store/booking-store.ts](store/booking-store.ts)).
-
-## Development Workflows
-
-### Database Commands
-
-```bash
-# Generate Prisma client after schema changes
-npx prisma generate
-
-# Create and run migration
-npx prisma migrate dev --name <migration_name>
-
-# Seed database (run SQL script manually)
-psql $DATABASE_URL < scripts/01-seed-spaces.sql
-
-# Open Prisma Studio
-npx prisma studio
-```
-
-### Development Server
-
-```bash
-pnpm dev      # Start dev server (localhost:3000)
-pnpm build    # Production build
-pnpm lint     # Run ESLint
-```
-
-### Adding shadcn/ui Components
-
-```bash
-npx shadcn@latest add <component-name>
-```
-
-Components follow New York style variant with Tailwind v4 (see [components.json](components.json)).
-
-## Project-Specific Conventions
-
-### File Naming
-
--   Pages: `page.tsx` (Next.js App Router convention)
--   Layouts: `layout.tsx`
--   Loading states: `loading.tsx`
--   Components: `kebab-case.tsx` (e.g., `theme-provider.tsx`)
--   Server Actions: `actions/<module>.ts`
-
-### Routing Structure
-
--   Client routes: `app/<route>/page.tsx`
--   Admin routes: `app/admin/<route>/page.tsx`
--   Dynamic segments: `[id]/page.tsx` (not `[slug]`)
-
-### Type Definitions
-
-Centralized in [lib/types.ts](lib/types.ts):
-
--   Import Prisma types: `import type { User, Space } from "@prisma/client"`
--   Extended types for relations: `BookingWithRelations`, `SpaceWithPricing`
--   Form data types: `LoginFormData`, `BookingFormData`, etc.
--   Action responses follow `{ success, message, data?, error? }` pattern
-
-### Currency Formatting
-
-Use helper from [lib/utils/format.ts](lib/utils/format.ts):
-
-```typescript
-// Display: divide by 100
-const displayPrice = (kobo: number) => `₦${(kobo / 100).toLocaleString()}`;
-```
-
-### State Management
-
-Zustand store at [store/booking-store.ts](store/booking-store.ts):
-
--   Persists to localStorage via `persist` middleware
--   Stores `subscriptionData` and `bookingData` separately
--   Clear store after payment completion
-
-## Common Gotchas
-
-1. **Server Actions, not API routes**: Use `import { action } from "@/actions"` pattern. No `/api/*` routes.
-
-2. **Pricing plans**: Spaces have multiple pricing options. Always show all plans for subscription spaces.
-
-3. **Date handling**: Use `date-fns` for formatting (already installed), not moment.js.
-
-4. **Authentication**: Custom session-based auth with `getCurrentUser()` and `getCurrentAdmin()`.
-
-5. **Image paths**: Public images referenced from `/` root (e.g., `/shared-coworking-space.jpg`).
-
-6. **Loading states**: Each page has a `loading.tsx` sibling for Suspense boundaries.
-
-7. **Password hashing**: Uses `bcryptjs` with 12 rounds.
-
-## Key Files Reference
-
--   [prisma/schema.prisma](prisma/schema.prisma) - Database schema with pricing/booking models
--   [lib/db.ts](lib/db.ts) - Prisma client singleton
--   [lib/types.ts](lib/types.ts) - TypeScript types and Prisma re-exports
--   [actions/index.ts](actions/index.ts) - Re-exports all server actions
--   [store/booking-store.ts](store/booking-store.ts) - Zustand booking state
--   [components/ui/](components/ui/) - shadcn/ui component library
--   [.env.example](.env.example) - Environment variables template
-
-## Server Actions Reference
-
-### Authentication (`actions/auth.ts`)
-
--   `register(data)` - Create new user account
--   `login(email, password)` - Client login
--   `adminLogin(email, password)` - Admin/staff login
--   `logout()` / `adminLogout()` - End session
--   `getCurrentUser()` / `getCurrentAdmin()` - Get authenticated user
--   `requestPasswordReset(email)` - Send reset email
--   `resetPassword(token, password)` - Reset password with token
-
-### Spaces (`actions/spaces.ts`)
-
--   `getSpaces(options?)` - List spaces with filters
--   `getSpaceById(id)` / `getSpaceBySlug(slug)` - Get single space
--   `getSubscriptionSpaces()` / `getBookingSpaces()` - Filter by type
--   `createSpace(data)` / `updateSpace(id, data)` / `deleteSpace(id)` - CRUD
--   `createPricingPlan(data)` / `updatePricingPlan(id, data)` - Manage plans
-
-### Bookings (`actions/bookings.ts`)
-
--   `getBookings(options?)` - List bookings
--   `getUserBookings()` - Current user's bookings
--   `createBooking(data)` - Create new booking
--   `checkInBooking(id)` / `checkOutBooking(id)` - Manage check-in
--   `checkInByQRCode(qrCode)` - QR scanner check-in
--   `cancelBooking(id)` - Cancel booking
--   `checkAvailability(spaceId, date, start, end)` - Check slot availability
-
-### Subscriptions (`actions/subscriptions.ts`)
-
--   `getSubscriptions(options?)` - List memberships
--   `getUserSubscriptions()` - Current user's subscriptions
--   `createSubscription(data)` - Create membership
--   `renewSubscription(id)` - Extend membership
--   `pauseSubscription(id)` / `cancelSubscription(id)` - Manage status
--   `assignDesk(id, deskNumber)` - Admin: assign desk
-
-### Payments (`actions/payments.ts`)
-
--   `initializePayment(data)` - Start Paystack payment
--   `verifyPayment(reference)` - Verify payment status
--   `recordManualPayment(data)` - Admin: record cash/transfer
--   `refundPayment(id, reason?)` - Process refund
--   `getPaymentStats(options?)` - Revenue statistics
-
-### Users (`actions/users.ts`)
-
--   `getProfile()` / `updateProfile(data)` - User profile
--   `changePassword(current, new)` - Change password
--   `getUsers(options?)` - Admin: list users
--   `createUser(data)` / `updateUser(id, data)` - Admin: manage users
--   `resetUserPassword(id, password)` - Admin: reset password
-
-### Admin (`actions/admin.ts`)
-
--   `getDashboardStats()` - Overview statistics
--   `getRevenueReport(options)` - Revenue by period
--   `getSpaceUtilization(options?)` - Space usage stats
--   `getActivityLogs(options?)` - Audit trail
--   `getTodayOverview()` - Today's check-ins and bookings
--   `exportBookingsCSV(options)` - Export data
+-   Next.js App Router with TypeScript strict mode
+-   Form validation with Zod + react-hook-form
+-   Toast notifications via Sonner
+-   Vercel deployment with special Prisma handling (see `vercel-build.sh`)
