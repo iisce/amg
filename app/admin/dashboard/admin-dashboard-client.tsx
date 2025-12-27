@@ -7,8 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
-	Calendar,
-	CalendarDays,
 	Users,
 	DollarSign,
 	TrendingUp,
@@ -16,16 +14,14 @@ import {
 	CheckCircle2,
 	Settings,
 	LogOut,
+	Loader2,
+	UserCog,
+	Calendar,
 	QrCode,
 	LayoutGrid,
 	FileText,
-	UserCog,
-	Loader2,
-	UserPlus,
-	Package,
-	ShoppingCart,
-	Blocks,
 } from 'lucide-react';
+import { AdminNavigation } from '@/components/admin/admin-navigation';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import type { DashboardStats } from '@/actions/admin';
@@ -167,89 +163,7 @@ export default function AdminDashboardClient({
 			</section>
 
 			{/* Navigation */}
-			<section className='border-b bg-muted/30'>
-				<div className='container mx-auto px-4'>
-					<nav className='flex gap-1 overflow-x-auto'>
-						<Link
-							href='/admin/dashboard'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 border-primary bg-background'
-						>
-							<LayoutGrid className='h-4 w-4' />
-							Overview
-						</Link>
-						<Link
-							href='/admin/bookings'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<Calendar className='h-4 w-4' />
-							Bookings
-						</Link>
-						<Link
-							href='/admin/members'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<Users className='h-4 w-4' />
-							Members
-						</Link>
-						<Link
-							href='/admin/spaces'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<LayoutGrid className='h-4 w-4' />
-							Spaces
-						</Link>
-						<Link
-							href='/admin/scanner'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<QrCode className='h-4 w-4' />
-							Scanner
-						</Link>
-						<Link
-							href='/admin/visitors'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<UserPlus className='h-4 w-4' />
-							Visitors
-						</Link>
-						<Link
-							href='/admin/tours'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<CalendarDays className='h-4 w-4' />
-							Tours
-						</Link>
-						<Link
-							href='/admin/inventory'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<Package className='h-4 w-4' />
-							Inventory
-						</Link>
-						<Link
-							href='/admin/shop'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<ShoppingCart className='h-4 w-4' />
-							Shop
-						</Link>
-						<Link
-							href='/admin/addons'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<Blocks className='h-4 w-4' />
-							Add-ons
-						</Link>
-						<Link
-							href='/admin/reports'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<FileText className='h-4 w-4' />
-							Reports
-						</Link>
-					</nav>
-				</div>
-			</section>
+			<AdminNavigation />
 
 			{/* Main Content */}
 			<main className='container mx-auto px-4 py-8'>

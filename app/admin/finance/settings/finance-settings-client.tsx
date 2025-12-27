@@ -23,19 +23,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from '@/components/ui/select';
-import {
-	Calendar,
-	LayoutGrid,
-	FileText,
-	Settings,
-	Wallet,
-	ArrowLeft,
-	Save,
-	Loader2,
-	Receipt,
-	DollarSign,
-	UserCog,
-} from 'lucide-react';
+import { ArrowLeft, Save, Loader2, Receipt, DollarSign } from 'lucide-react';
+import { AdminNavigation } from '@/components/admin/admin-navigation';
 import { toast } from 'sonner';
 import { updateFinanceSettings, type FinanceSettings } from '@/actions/finance';
 
@@ -154,47 +143,7 @@ export default function FinanceSettingsClient({
 			</section>
 
 			{/* Navigation */}
-			<section className='border-b bg-muted/30'>
-				<div className='container mx-auto px-4'>
-					<nav className='flex gap-1 overflow-x-auto'>
-						<Link
-							href='/admin/dashboard'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<LayoutGrid className='h-4 w-4' />
-							Overview
-						</Link>
-						<Link
-							href='/admin/bookings'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<Calendar className='h-4 w-4' />
-							Bookings
-						</Link>
-						<Link
-							href='/admin/members'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<UserCog className='h-4 w-4' />
-							Members
-						</Link>
-						<Link
-							href='/admin/finance'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<Wallet className='h-4 w-4' />
-							Finance
-						</Link>
-						<Link
-							href='/admin/finance/settings'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 border-primary text-foreground'
-						>
-							<Settings className='h-4 w-4' />
-							Settings
-						</Link>
-					</nav>
-				</div>
-			</section>
+			<AdminNavigation />
 
 			{/* Content */}
 			<section className='px-4 py-8'>

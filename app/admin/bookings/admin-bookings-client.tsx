@@ -13,22 +13,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from '@/components/ui/select';
-import {
-	Calendar,
-	CalendarDays,
-	Clock,
-	Search,
-	Filter,
-	Plus,
-	Eye,
-	LayoutGrid,
-	UserCog,
-	FileText,
-	QrCode,
-	Package,
-	ShoppingCart,
-	Blocks,
-} from 'lucide-react';
+import { Calendar, Clock, Search, Filter, Plus, Eye } from 'lucide-react';
+import { AdminNavigation } from '@/components/admin/admin-navigation';
 import { format } from 'date-fns';
 import type { BookingWithRelations } from '@/actions/bookings';
 
@@ -110,82 +96,7 @@ export default function AdminBookingsClient({
 			</section>
 
 			{/* Navigation */}
-			<section className='border-b bg-muted/30'>
-				<div className='container mx-auto px-4'>
-					<nav className='flex gap-1 overflow-x-auto'>
-						<Link
-							href='/admin/dashboard'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<LayoutGrid className='h-4 w-4' />
-							Overview
-						</Link>
-						<Link
-							href='/admin/bookings'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 border-primary bg-background'
-						>
-							<Calendar className='h-4 w-4' />
-							Bookings
-						</Link>
-						<Link
-							href='/admin/spaces'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<LayoutGrid className='h-4 w-4' />
-							Spaces
-						</Link>
-						<Link
-							href='/admin/members'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<UserCog className='h-4 w-4' />
-							Members
-						</Link>
-						<Link
-							href='/admin/tours'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<CalendarDays className='h-4 w-4' />
-							Tours
-						</Link>
-						<Link
-							href='/admin/inventory'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<Package className='h-4 w-4' />
-							Inventory
-						</Link>
-						<Link
-							href='/admin/shop'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<ShoppingCart className='h-4 w-4' />
-							Shop
-						</Link>
-						<Link
-							href='/admin/addons'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<Blocks className='h-4 w-4' />
-							Add-ons
-						</Link>
-						<Link
-							href='/admin/reports'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<FileText className='h-4 w-4' />
-							Reports
-						</Link>
-						<Link
-							href='/admin/scanner'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<QrCode className='h-4 w-4' />
-							QR Scanner
-						</Link>
-					</nav>
-				</div>
-			</section>
+			<AdminNavigation />
 
 			{/* Content */}
 			<section className='px-4 py-8'>

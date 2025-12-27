@@ -42,10 +42,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
 	Users,
-	Calendar,
-	LayoutGrid,
-	FileText,
-	UserPlus,
 	Search,
 	MoreHorizontal,
 	Eye,
@@ -63,6 +59,7 @@ import {
 	Building2,
 	DollarSign,
 } from 'lucide-react';
+import { AdminNavigation } from '@/components/admin/admin-navigation';
 import { toast } from 'sonner';
 import type { MembershipWithRelations } from '@/actions/subscriptions';
 import type { MembershipStatus } from '@prisma/client';
@@ -369,61 +366,11 @@ export default function AdminMembershipsClient({
 							</Button>
 						</div>
 					</div>
-
-					{/* Navigation */}
-					<nav className='flex gap-1 mt-6 overflow-x-auto pb-2'>
-						<Link
-							href='/admin/dashboard'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<LayoutGrid className='h-4 w-4' />
-							Dashboard
-						</Link>
-						<Link
-							href='/admin/bookings'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<Calendar className='h-4 w-4' />
-							Bookings
-						</Link>
-						<Link
-							href='/admin/memberships'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-foreground border-b-2 border-primary'
-						>
-							<CreditCard className='h-4 w-4' />
-							Memberships
-						</Link>
-						<Link
-							href='/admin/members'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<Users className='h-4 w-4' />
-							Members
-						</Link>
-						<Link
-							href='/admin/spaces'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<LayoutGrid className='h-4 w-4' />
-							Spaces
-						</Link>
-						<Link
-							href='/admin/visitors'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<UserPlus className='h-4 w-4' />
-							Visitors
-						</Link>
-						<Link
-							href='/admin/reports'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground'
-						>
-							<FileText className='h-4 w-4' />
-							Reports
-						</Link>
-					</nav>
 				</div>
 			</section>
+
+			{/* Navigation */}
+			<AdminNavigation />
 
 			{/* Main Content */}
 			<main className='container mx-auto px-4 py-8'>

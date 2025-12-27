@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { AdminNavigation } from '@/components/admin/admin-navigation';
 import {
 	Card,
 	CardContent,
@@ -44,17 +44,11 @@ import {
 	Users,
 	CalendarIcon,
 	CalendarDays,
-	LayoutGrid,
-	UserCog,
-	Package,
-	ShoppingCart,
 	Trophy,
 	Clock,
 	Building2,
 	CreditCard,
-	Wallet,
 	Receipt,
-	BarChart3,
 	PieChart,
 	Activity,
 	Target,
@@ -515,47 +509,7 @@ export default function AdminReportsClient({
 			</section>
 
 			{/* Navigation */}
-			<section className='border-b bg-muted/30'>
-				<div className='container mx-auto px-4'>
-					<nav className='flex gap-1 overflow-x-auto'>
-						<Link
-							href='/admin/dashboard'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<LayoutGrid className='h-4 w-4' />
-							Overview
-						</Link>
-						<Link
-							href='/admin/bookings'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<CalendarIcon className='h-4 w-4' />
-							Bookings
-						</Link>
-						<Link
-							href='/admin/members'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<UserCog className='h-4 w-4' />
-							Members
-						</Link>
-						<Link
-							href='/admin/finance'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50'
-						>
-							<Wallet className='h-4 w-4' />
-							Finance
-						</Link>
-						<Link
-							href='/admin/reports'
-							className='flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 border-primary text-foreground'
-						>
-							<BarChart3 className='h-4 w-4' />
-							Reports
-						</Link>
-					</nav>
-				</div>
-			</section>
+			<AdminNavigation />
 
 			{/* Content */}
 			<section className='px-4 py-8'>
